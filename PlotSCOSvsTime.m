@@ -92,15 +92,15 @@ if ~exist(maskFile,'file')
 else
     if nargin == 0 % GUI mode
         answer = questdlg('Mask file already exist, do you want to define it again?','','Yes','No','No');
-        loadExistingFile_flag = strcmp(answer,'Yes');
+        loadExistingFile_flag = strcmp(answer,'No');
     else      % Command line mode -> load the saved mask 
         loadExistingFile_flag = 1;
     end
 end
    
-[ first_frame ] = ReadRecord(recordName,1, {'Tint','FR','Gain','Fiber'});     
+[ first_frame ] = ReadRecord(recordName,1);     
 if ~loadExistingFile_flag
-    %%
+    %% ask the user to mark a circle on the image
 
     f = figure('position',[50,50,1200,800]); imagesc(first_frame); colormap gray; colorbar
     title(rawName,'interpreter','none')
@@ -115,12 +115,14 @@ else
     load(maskFile)
 %     figure; imshowpair(first_frame,mask);  
 end
-title(rawName);
 
 %% Read Record
+disp(['Reading Record "' recordName '" ... '])
 [ head_rec , ~ , ~ , ~ , info] = ReadRecord(recordName,Inf, {'Tint','FR','Gain','Fiber'});
 
 %%  Calc Specle Contrast
+disp(['Calculation SCOS on "' recordName '" ... '])
+
 roi_half_size = ceil((c.Radius+windowSize));
 roi = [ round(c.Center(2)) + (-roi_half_size:roi_half_size) ;
         round(c.Center(1)) + (-roi_half_size:roi_half_size) ];

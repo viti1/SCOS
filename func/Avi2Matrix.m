@@ -1,9 +1,16 @@
 function  [Rec, v] = Avi2Matrix(filename, MaxNOfFrames)
-    v = VideoReader(filename);  
-    if exist('MaxNOfFrames','var')
-        nOfFramesToRead = min(v.NumFrames,MaxNOfFrames);
+    v = VideoReader(filename);
+    nOfFramesInRecord = v.Duration*v.FrameRate -1; % Not using the field 'NumFrames' because it is not consistent with different matlab versions
+%     if isprop(v,'NumberOfFrames')
+%         nOfFramesInRecord = v.NumberOfFrames;
+%     else
+%         nOfFramesInRecord = v.NumFrames;
+%     end
+    
+    if exist('MaxNOfFrames','var')        
+        nOfFramesToRead = min(nOfFramesInRecord,MaxNOfFrames);
     else
-        nOfFramesToRead = v.NumberOfFrames;    
+        nOfFramesToRead = nOfFramesInRecord;    
     end
     
     % Read 
