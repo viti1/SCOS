@@ -1,9 +1,17 @@
 %-------------------------------------------------------
-% Input : full path of folder with .tiff or .tif or .avi files, or a file
-% with  .tif/.tiff extention
-% assuming gray scale image
+% [Rec, parameters_names, parameters_values, parameters_units , info] = ...
+%       ReadRecord(file_or_folder,max_num_of_frames,parameters_names,parameters_expected_units)
+
+% Input : 
+%   file_or_folder - full path of folder with .tiff/.tif files or single .avi file, 
+%                    or full path of .avi/.tif/.tiff file.
+%                    Assuming gray scale image.
+%   
+%   max_num_of_frames - [optional] read at most this number of frames. If record contains less frames - no error is issued.
+%   parameters_names  - [optional] parameters from the file_or_folder name
+%   parameters_expected_units - [optional] expected units of the parameters, mainly used to make sure not to confuse ms and us in integration time
 %-------------------------------------------------------
-function [Rec, parameters_names, parameters_values, parameters_units , info] = ReadRecord(file_or_folder,MaxNOfFrames,parameters_names,parameters_expected_units)
+function [Rec, parameters_names, parameters_values, parameters_units , info] = ReadRecord(file_or_folder,max_num_of_frames,parameters_names,parameters_expected_units)
     if ~exist(file_or_folder,'file')
         error(['path ' file_or_folder ' don''t exist'])
     end
@@ -19,16 +27,16 @@ function [Rec, parameters_names, parameters_values, parameters_units , info] = R
             error([ '''' folderpath ''' contains both ''.tiff'' or ''.avi'' files. It must contain only one the the file types ' ]);        
         elseif ~isempty(avi_files)
             if numel(avi_files) > 1
-                error([ folderpath ' must contain only one .avi file but contains ' numel(avi_files) ' files.']);
+                error([ '"' folderpath '" must contain only one .avi file but contains ' num2str(numel(avi_files)) ' files.']);
             end
-            if exist('MaxNOfFrames','var')
-                [Rec, avi_info] = Avi2Matrix( fullfile(folderpath,avi_files.name) ,MaxNOfFrames);
+            if exist('max_num_of_frames','var')
+                [Rec, avi_info] = Avi2Matrix( fullfile(folderpath,avi_files.name) ,max_num_of_frames);
             else
                 [Rec, avi_info] = Avi2Matrix( fullfile(folderpath,avi_files.name) );
             end
         elseif ~isempty(tiff_files)
-            if exist('MaxNOfFrames','var')
-                nOfFrames = min(MaxNOfFrames,numel(tiff_files));
+            if exist('max_num_of_frames','var')
+                nOfFrames = min(max_num_of_frames,numel(tiff_files));
             else
                 nOfFrames = numel(tiff_files);
             end
@@ -49,8 +57,8 @@ function [Rec, parameters_names, parameters_values, parameters_units , info] = R
     else    
         [folderpath, ~ , ext] = fileparts(file_or_folder);
         if strcmp(ext,'.avi')
-            if exist('MaxNOfFrames','var')
-                [Rec, avi_info] = Avi2Matrix( file_or_folder ,MaxNOfFrames );
+            if exist('max_num_of_frames','var')
+                [Rec, avi_info] = Avi2Matrix( file_or_folder ,max_num_of_frames );
             else
                 [Rec, avi_info] = Avi2Matrix( file_or_folder  );
             end
@@ -68,6 +76,10 @@ function [Rec, parameters_names, parameters_values, parameters_units , info] = R
     if ~exist('parameters_names','var')
         parameters_names = {'Tint','FrameRate','Gain','f'};
         parameters_expected_units = {'ms','Hz','','mm'};
+    end
+
+    if ischar(parameters_names)
+        parameters_names = {parameters_names};
     end
 
     sp = strsplit(folderpath,filesep); foldername = sp{end};

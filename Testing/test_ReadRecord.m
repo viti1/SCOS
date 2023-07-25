@@ -6,46 +6,62 @@ runOnLocal = 1; % 1 or 0
 [mFolder, mName ] = fileparts(mfilename('fullpath'));
 functionName = mName(find(mName=='_',1)+1:end); %functionName ='ReadRecord';
 
-testingFoldersList = jsondecode(fileread(fullfile(mFolder,'testsFolder.json'))); 
+testsFoldersList = jsondecode(fileread(fullfile(mFolder,'testsFolder.json'))); 
 if runOnLocal
-    testingFolder = testingFoldersList.local;   %#ok<UNRCH>
+    testsFolder = testsFoldersList.local;   %#ok<UNRCH>
 else
-    testingFolder = testingFoldersList.global;  %#ok<UNRCH>
+    testsFolder = testsFoldersList.global;  %#ok<UNRCH>
 end
 
-testingFolderFun = fullfile(testingFolder,functionName); % testing folder of the specific function 
-if exist(testingFolderFun,'file')~=7
-    error(['Testing Folder "' testingFolderFun '" does not exist!'])
+testsFolderFunc = fullfile(testsFolder,functionName); % testing folder of the specific function 
+if exist(testsFolderFunc,'file')~=7
+    error(['Testing Folder "' testsFolderFunc '" does not exist!'])
 end
-casesStruct = load( fullfile( testingFolderFun ,['testScenatios_' functionName '.mat']) );
+casesStruct = load( fullfile( testsFolderFunc ,['testScenatios_' functionName '.mat']) );
 
 %% Run Over all Cases
-passArr=true(1,numel(casesStruct.cases));
+passArr=nan(size(casesStruct.cases));
 for test_i = 1:numel(casesStruct.cases)
     testCase = casesStruct.cases(test_i);
     disp([10 'Test Case Num ' num2str(test_i) ':'])
     disp(testCase.input);
     
     try
-        currOutput = run_ReadRecord(testCase.input, testingFolderFun);
+        currOutput = run_ReadRecord(testCase.input, testsFolderFunc);
         if ~isequaln(currOutput,testCase.output)
             passArr(test_i) = false;
-            warning(['Case ' num2str(test_i) ': OUTPUT is not as expected ! ']);
+            disp(' < FAILED >')
+            [same, diff_recOutput, diff_groundTruth] = comp_struct(currOutput,testCase.output);
+            disp('Fields that are different: ')
+            disp('    Expected : '); disp(diff_groundTruth)
+            disp('    Recieved : '); disp(diff_recOutput)
+            warning(['Case ' num2str(test_i) ': wrong output! ']);
         else
+            passArr(test_i) = true;
             disp(' < PASSED >')
         end
     catch err
-        if isfield(testCase.output,'error') 
-            if isequaln(err.message,testCase.output.error.message) 
+        if isfield(testCase.output,'error')
+            % update error string, in case testsFolderFunc was changed
+            recievedError  = strrep(err.message                    , testsFolderFunc             ,'<TestsFolder>');
+            expectedEror = strrep(testCase.output.error.message  , casesStruct.testsFolderFunc ,'<TestsFolder>');
+            
+            % compare errors
+            if isequaln(recievedError,expectedEror) 
+                passArr(test_i) = true;
                 disp('< PASSED >')
             else
+                passArr(test_i) = false;
+                disp(' < FAILED >')
                 warning(['Case ' num2str(test_i) ': failed as expected but the error is wrong ! '])
-                warning(['Expected Error : ' testCase.output.error.message ]);
-                disp(testCase.output.error.stack)
-                warning(['Actual   Error : ' err.message ])
-                disp(err.stack)
+                disp(['Expected Error : ' expectedEror  ]);
+                %disp(testCase.output.error.stack)
+                disp(['Recieved Error : ' recievedError   ])
+                %disp(err.stack)
             end
         else
+            passArr(test_i) = false;
+            disp(' < FAILED >')
             passArr(test_i) = false;
             warning(['Case ' num2str(test_i) ':  FAILED on running ! ']);
         end
@@ -56,5 +72,5 @@ disp([10 '~~~~~~~~~~~~~~~~~~~~~~ Summary ~~~~~~~~~~~~~~~~~~~~~~~~~' ])
 if all(passArr)
     disp([ functionName ' : Congradulations - All Tests Passed !' ])
 else
-    warning([ functionName '() function' 10 ' test passed : ' num2str(find(passArr)) 10 ' test failed : ' num2str(find(~passArr)) ])
+    disp([ functionName '() Test ' 10 ' Passed : ' num2str(find(passArr==1)) 10 ' Failed : ' num2str(find(passArr==0)) 10 ' Ignored : ' num2str(find(isnan(passArr)))  ])
 end

@@ -6,6 +6,9 @@
 % 
 %----------------------------------------------------------
 function [parameters_values, parameters_units] = ExtractParametersFromString(string,parameters_names)
+    if ischar(parameters_names)
+        parameters_names = {parameters_names};
+    end
     % Initialize the output variables
     parameters_values = NaN(1, numel(parameters_names));
     parameters_units = cell(1, numel(parameters_names));
