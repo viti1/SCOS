@@ -11,7 +11,8 @@
 %   parameters_names  - [optional] parameters from the file_or_folder name
 %   parameters_expected_units - [optional] expected units of the parameters, mainly used to make sure not to confuse ms and us in integration time
 %-------------------------------------------------------
-function [Rec, parameters_names, parameters_values, parameters_units , info] = ReadRecord(file_or_folder,max_num_of_frames,parameters_names,parameters_expected_units)
+function [Rec, parameters_names, parameters_values, parameters_units , info] = ...
+                ReadRecord( file_or_folder, max_num_of_frames, parameters_names, parameters_expected_units )
     if ~exist(file_or_folder,'file')
         error(['path ' file_or_folder ' don''t exist'])
     end

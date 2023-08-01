@@ -1,5 +1,22 @@
+% [localSpatialNoise, globalSpatialNoise, temporalNoise , localSpatialNoiseRel, globalSpatialNoiseRel, temporalNoiseRel, meanImPerFrame ] = ...
+%                 CalcNoise(rec,windowSize,mask,plotFlag)
+%  Input :
+%   rec - 3D matrix 
+%   windowSize - for local noise calculation
+%   mask - [optional] boolean, must be the same size as rec (in 2D). Defauld - largest fitting circle. 
+%   plotFlag - [optional] default = false
+%  Output:
+%   localSpatialNoise  - local (in windowSize) spatial std averageed, after time averaging  ( in mask range )
+%   globalSpatialNoise - spatial std after time averaging  ( in mask range )
+%   temporalNoise      - spatial mean of std in time dimention ( in mask range) 
+%
+%
+%
+%
+
 function [localSpatialNoise, globalSpatialNoise, temporalNoise , localSpatialNoiseRel, globalSpatialNoiseRel, temporalNoiseRel, meanImPerFrame ] = ...
-                CalcNoise2(rec,windowSize,mask,plot_flag)
+                CalcNoise(rec,windowSize,mask,plotFlag)
+    % TBD : for temporal noise - substruct mean ? issue a warning        
     nOfFrames = size(rec,3);
     %nX = size(rec,2); nY = size(rec,1);
     
@@ -7,9 +24,11 @@ function [localSpatialNoise, globalSpatialNoise, temporalNoise , localSpatialNoi
         mask = CreateCircleMask([size(rec,1),size(rec,2)]);
     end
     
-    if ~exist('plot_flag','var') 
-        plot_flag = false;
+    if ~exist('plotFlag','var') 
+        plotFlag = false;
     end
+    
+    rec = double(rec);
     
     meanIm = mean(rec,3);
     lpIm = medfilt2(meanIm,[windowSize,  windowSize]);
@@ -18,7 +37,7 @@ function [localSpatialNoise, globalSpatialNoise, temporalNoise , localSpatialNoi
     temporalNoise = mean(temporalNoiseMat(mask));
     temporalNoiseRel = mean(temporalNoiseMat(mask)./lpIm(mask));
 
-    if plot_flag
+    if plotFlag
         figure; 
         subplot(4,1,1);
         hist(temporalNoiseMat(:),500);
@@ -52,7 +71,7 @@ function [localSpatialNoise, globalSpatialNoise, temporalNoise , localSpatialNoi
     globalSpatialNoiseRel = globalSpatialNoise/mean(lpIm(mask));
     
     
-    if plot_flag
+    if plotFlag
         subplot(4,1,2);
         plot(globalSpatialNoisePerFrame);
         title('Spatial Noise Per Frame');

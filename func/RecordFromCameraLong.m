@@ -1,4 +1,5 @@
 function [ filename ] = RecordFromCameraLong(nOfFrames,Tint,gain,frameRate,blackLevel,outputParentFolder,prefix,suffix,vid,videoFormat)
+%% ! DONT USE - NEEDS TO BE CHECKED
 %% [ rec, filename ] = RecordFromCameraLong(nOfFrames,Tint,gain,frameRate,blackLevel,outputParentFolder,prefix,suffix,vid,videoFormat)
 % Records from camera and saved the record in .tiff files - frame by frame
 % Input : 
