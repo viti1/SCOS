@@ -1,22 +1,19 @@
 function out = run_ReadRecord(input,testingFolder)
-% input struct must have one special variable called 'testingFolder' wich will be added to input.file_or_folder 
+% [rec, info] = ReadRecord( recName, nOfFrames , startFrame)
+
     out = struct();
-    input.file_or_folder = fullfile(testingFolder, input.file_or_folder);
-    if isfield(input,'MaxNOfFrames')
-        if isfield(input,'parameters_names')
-            if isfield(input,'parameters_expected_units')
-                [out.Rec,out.parameters_names, out.parameters_values, out.parameters_units , out.info] = ...
-                    ReadRecord(input.file_or_folder, input.MaxNOfFrames, input.parameters_names, input.parameters_expected_units);
-            else
-                [out.Rec,out.parameters_names, out.parameters_values, out.parameters_units , out.info] = ...
-                    ReadRecord(input.file_or_folder, input.MaxNOfFrames, input.parameters_names);
-            end
+    input.recName = fullfile(testingFolder, input.recName);
+    if isfield(input,'nOfFrames')
+        if isfield(input,'startFrame')
+            [out.rec, out.info] = ReadRecord(input.recName, input.nOfFrames, input.startFrame);
         else
-            [out.Rec,out.parameters_names, out.parameters_values, out.parameters_units , out.info] = ...
-                ReadRecord(input.file_or_folder, input.MaxNOfFrames);            
+            [out.rec, out.info] = ReadRecord(input.recName, input.nOfFrames);            
         end
     else
-        [out.Rec,out.parameters_names, out.parameters_values, out.parameters_units , out.info] = ...
-            ReadRecord(input.file_or_folder);
+        if isfield(input,'startFrame')
+            [out.rec, out.info] = ReadRecord(input.recName , [] , input.startFrame);
+        else
+            [out.rec, out.info] = ReadRecord(input.recName ); 
+        end
     end
 end
