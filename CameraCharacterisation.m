@@ -1,6 +1,6 @@
 %% Set Parameters - Must run this section before any other section in the file
 windowSize = 9; % for spatial local noise calculation
-noiseFolder = [fileparts(mfilename('fullpath')) '\Records\NoiseAndBackground'];
+noiseFolder = [fileparts(fileparts(mfilename('fullpath'))) '\Records\NoiseAndBackground'];
 if ~exist(noiseFolder,'dir'); error('Wrong noise folder!'); end
 detectorName = 'Basler_1440GS_Vika01';
 videoFormat = 'Mono8'; 
@@ -182,8 +182,8 @@ savefig(blFig, [analysisFolder '\ReadNoise vs BlackLevel.fig'])
 
 %% Read Noise vs Gain - Record
 readNoiseVsGainFolder = [ analysisFolder filesep 'ReadNoise\vsGain'];
-RN.gainArr = 0:5:30;
-RN.blackLevel = 15;
+RN.gainArr = [ 0:5:25 27 30 33 36];
+RN.blackLevel = 30;
 prefix = 'Cover';
 suffix = '';
 nOfFrames = 90;
@@ -195,9 +195,9 @@ camParams.videoFormat = videoFormat;
 camParams.addToFilename.videoFormat = false;
 camParams.BlackLevel = RN.blackLevel;
 
-if ~exist(readNoiseBLFolder,'file'); mkdir(readNoiseBLFolder); end
-if numel(dir(readNoiseBLFolder)) > 2 % in case of empty folder the result of dir() is {'.','..'} 
-    answer = input(['"' readNoiseBLFolder '" is not empty, are you sure you want to rewrite it? (Y/N) '],'s'); 
+if ~exist(readNoiseVsGainFolder,'file'); mkdir(readNoiseVsGainFolder); end
+if numel(dir(readNoiseVsGainFolder)) > 2 % in case of empty folder the result of dir() is {'.','..'} 
+    answer = input(['"' readNoiseVsGainFolder '" is not empty, are you sure you want to rewrite it? (Y/N) '],'s'); 
     if ~strcmpi(answer,'Y')
        disp('Aborting...');
        return; 
@@ -205,7 +205,8 @@ if numel(dir(readNoiseBLFolder)) > 2 % in case of empty folder the result of dir
 end
 % record 
 vid = videoinput("gentl", 1, videoFormat);% vid =[];
-for gain = BL.gainArr
+for gain = [14 16]%RN.gainArr
+%     if gain < 25; continue; end 
     camParams.Gain = gain;
     RecordFromCamera(nOfFrames, camParams, setupParams , readNoiseVsGainFolder  , recFormat, prefix, suffix, 1 , 0 , vid);
 end
@@ -215,38 +216,39 @@ clear gain bl camParams
 %% Read Noise vs Gain - Calc
     
 readNoiseVsGain_matfile = [readNoiseVsGainFolder filesep 'readNoiseVsGain.mat'];
-if ~exist(readNoisevsBL_matfile,'file') || recalc_RN 
+if ~exist(readNoiseVsGain_matfile,'file') || recalc_RN 
     % if you want to choose specific black level uncomment the next two line , and comment the followint Choose Records block 
-    % blackLevel=15;
-    % [ records , gainArr ] = ChooseRecords( readNoiseVsGainFolder  , ['Cover*BL' num2str(blackLevel) 'DUGain*'], 'Gain'  );
+    blackLevel=30;
+    [ records , RN.gainArr ] = ChooseRecords( readNoiseVsGainFolder  , ['Cover*BL' num2str(blackLevel) 'DU*Gain*'], 'Gain'  );
 
-    [ records , gainArr ] = ChooseRecords( readNoiseVsGainFolder  , 'Cover*Gain*', 'Gain'  );
-    blackLevelArr = SortRecords(records,'BL'); 
+%     [ records , gainArr ] = ChooseRecords( readNoiseVsGainFolder  , 'Cover*Gain*', 'Gain'  );
+    [~,blackLevelArr] = SortRecords(records,'BL'); 
     RN.blackLevel=blackLevelArr(1);
     if numel(unique(blackLevelArr))~=1
         error('Read Noise vs Gain: There should be only one black level.')
     end
 
     disp('Calculating Read Noise vs Gain...')
-    [ BL.locSpatNoise ,BL.globSpatNoise, BL.tempNoise , BL.meanI]  = InitNaN( [numel(BL.gainArr) numel(BL.blackLevelArr)] );
-    for i = 1:numel(RN.gainArr)
+    [ RN.locSpatNoise ,RN.globSpatNoise, RN.tempNoise , RN.meanI]  = InitNaN( [numel(RN.gainArr) numel(RN.blackLevel)] );
+    for gain_i = 1:numel(RN.gainArr)
         disp(records{i})
-        [RN.locSpatNoise(gain_i), RN.globSpatNoise(gain_i), RN.tempNoise(gain_i), RN.meanI(gain_i)] = CalcNoise(records{i},windowSize,[],0);
+        [RN.locSpatNoise(gain_i), RN.globSpatNoise(gain_i), RN.tempNoise(gain_i), RN.meanI(gain_i)] = CalcNoise(records{gain_i},windowSize,[],0);
     end
 
-    save(readNoiseVsBL_matfile,'-struct','RN')
+    RN.totNoise = sqrt(RN.locSpatNoise.^2 + RN.tempNoise.^2 );
+
+    save(readNoiseVsGain_matfile,'-struct','RN')
 else
     RN = load(readNoiseVsGain_matfile);
 end
 %% Read Noise vs Gain - Plot
 % 1. left plot Read Noise in DU, right plot Read Noise in [e]
 rnFig = figure('name', 'ReadNoise vs Gain' ,'Units','Normalized','Position',[0.3 0.2 0.63 0.4]);
-RN.totNoise = sqrt(RN.locSpatNoise.^2 + RN.tempNoise.^2 );
 
 subplot(1,2,1)
-plot(gainArr,RN.tempNoise,'*-'); hold on
-plot(gainArr,RN.locSpatNoise,'*-');
-plot(gainArr,sqrt(RN.locSpatNoise.^2 + RN.tempNoise^2 ) ,'*-');
+plot(RN.gainArr,RN.tempNoise,'*-'); hold on
+plot(RN.gainArr,RN.locSpatNoise,'*-');
+plot(RN.gainArr,RN.totNoise ,'*-');
 ylabel('Noise [DU]');
 xlabel('Gain [dB]')
 title([' Read Noise [DU] vs Gain , BlackLevel=' , num2str(RN.blackLevel)])
@@ -261,9 +263,9 @@ nBits = 8;
 RN.actualGainArr = reshape( ConvertGain(RN.gainArr,nBits,wellCapacity), [numel(RN.gainArr) 1] );
 
 subplot(1,2,2);
-plot(gainArr,RN.tempNoise(:,bl_i)./RN.actualGainArr,'*-'); hold on
-plot(gainArr,RN.locSpatNoise(:,bl_i)./RN.actualGainArr,'*-');
-plot(gainArr,RN.totNoise./RN.actualGainArr ,'*-');
+plot(RN.gainArr,RN.tempNoise./RN.actualGainArr,'*-'); hold on
+plot(RN.gainArr,RN.locSpatNoise./RN.actualGainArr,'*-');
+plot(RN.gainArr,RN.totNoise./RN.actualGainArr ,'*-');
 ylabel('Noise [e]');
 xlabel('Gain [dB]');
 grid on ;

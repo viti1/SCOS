@@ -102,25 +102,25 @@ if ~exist('mask','var')
 
         f = figure('position',[50,50,1200,800]); imagesc(first_frame); colormap gray; colorbar
         title(rawName,'interpreter','none');
-        answer = questdlg('One Channel or multichannel?', 'What is the test type', ...
-            'One Channel','MultiChannel','One Channel');
-        multiChFlag = strcmp(answer,'MultiChannel');      
-        
-        mask = false(size(first_frame,1),size(first_frame,2));
+        totMask  = false(size(first_frame,1),size(first_frame,2));    
         drawOneMore = true;
+        k = 1; circles = struct();
         while drawOneMore
             circ = drawcircle('Color','r','FaceAlpha',0.2);
-            c.Center = circ.Center; c.Radius = circ.Radius;
+            circles(k).Center = circ.Center; 
+            circles(k).Radius = circ.Radius;
+            k=k+1;
             [x,y] = meshgrid(1:size(first_frame,2),1:size(first_frame,1));
-            mask((x-circ.Center(1)).^2 + (y-circ.Center(2)).^2 < circ.Radius^2 ) = true;
-            if multiChFlag
-                answer = questdlg('One more channel?', '','Yes','No','Yes');
-                drawOneMore = strcmp(answer,'Yes');
-            else
-                drawOneMore = false;
-            end
+            
+            masks{k} = false(size(first_frame,1),size(first_frame,2)); %#ok<AGROW>
+            masks{k}((x-circ.Center(1)).^2 + (y-circ.Center(2)).^2 < circ.Radius^2 ) = true; %#ok<AGROW>
+            totMask = masks{k} | totMask ;
+            answer = questdlg('One more channel?', '','Yes','No','Yes');
+            drawOneMore = strcmp(answer,'Yes');
         end
-        save(maskFile,'mask','circ');
+        
+        nOfChannels = numel(circles);
+        save(maskFile,'mask','circles');
         close(f)
     else 
         load(maskFile)
@@ -136,11 +136,6 @@ disp(['Reading Record "' recordName '" ... '])
 
 %%  Calc Specle Contrast
 disp(['Calculation SCOS on "' recordName '" ... '])
-
-roi_half_size = ceil((c.Radius+windowSize)) ;
-roi = [ round(c.Center(2)) + (-roi_half_size:roi_half_size) ;
-        round(c.Center(1)) + (-roi_half_size:roi_half_size) ];
-
 nOfFrames = size(head_rec,3);
 
 %% Load rellevant parameters from camera characterizaion file 
@@ -166,25 +161,16 @@ nOfFrames = size(head_rec,3);
 %         background = zeros(size(first_frame));
 %     end
 % end
-background = zeros(size(first_frame));
-cut_background  = background(  roi(1,:)  , roi(2,:));
-cut_mask        = mask(roi(1,:)  , roi(2,:));
+% background = zeros(size(first_frame));
 [rawSpeckleVar , rawSpeckleContrast , corrSpeckleVar , corrSpeckleContrast , imMeanVec] = InitNaN([nOfFrames 1]);
 for i=1:nOfFrames
     im = head_rec(:,:,i);
-    cut_im   = im(  roi(1,:)  , roi(2,:));
-    %figure; imshowpair(cut_im,cut_mask);
-%     fixed_im = PixFix(cut_im - cut_background ,dData.BPMask)  ; % TBD!!
-%     stdIm = stdfilt(fixed_im,true(windowSize));    
-%     meanIm = imfilter(fixed_im, H); % TBD!!!
-    meanFrame = mean(cut_im(cut_mask));
-    stdIm = stdfilt(cut_im,true(windowSize));  
-    rawSpeckleVar(i) = mean(stdIm(cut_mask))^2;
-    rawSpeckleContrast(i) = rawSpeckleVar(i)/meanFrame^2;
-%     rawSpeckleContrast(i) = mean(stdIm(cut_mask)./meanIm(cut_mask))^2;
-%     corrSpeckleVar(i) =  mean((stdIm(cut_mask)- actualGain*meanIm - readoutN -1/12))^2  ; % TBD !!!
-%     corrSpeckleContrast(i) = mean((stdIm(cut_mask)- actualGain*meanIm - readoutN -1/12)./meanIm(cut_mask))^2  ;
-    
+    stdIm = stdfilt(im,true(windowSize));
+    for k = 1:nOfChannels
+        meanPerChannel{k} = mean(im(masks{k}));
+        rawSpeckleVar{k}(i) = mean(stdIm(masks{k}))^2;
+        rawSpeckleContrast{k}(i) = rawSpeckleVar(i)/meanFrame^2;
+    end
     imMeanVec(i) = meanFrame; % mean(meanIm);
 end
 IMean = mean(imMeanVec);

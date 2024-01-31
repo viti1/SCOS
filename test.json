@@ -1,0 +1,12 @@
+{
+    "Camera":"Basler_acA1440-220um_SN40335401", 
+    "Objective":"Edmunds_PlanN_x20", 
+    "ObjectiveLocation":"Close", 
+    "Lens":"None", 
+    "Phantom":"0.68%", 
+    "SDS":"1.5cm", 
+    "FiberCollect":"400um", 
+    "FiberFromLaser":"62.5um", 
+    "LaserPulsed":"No", 
+    "addToFilename":false
+}
