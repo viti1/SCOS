@@ -56,11 +56,19 @@ varargout{1} = handles.output;
 
 % --- Executes on Calc Contrast start button press 
 function btn_start_Callback(hObject, eventdata, handles)
-if handles.fig_SCOS_GUI.UserData.calcSCOS_Flag
-    return; % do nothing
+if isequal(hObject.String,'Start SCOS') % 
+    if handles.fig_SCOS_GUI.UserData.calcSCOS_Flag
+        return; % do nothing
+    end
+    handles.fig_SCOS_GUI.UserData.calcSCOS_Flag = true;
+    handles.fig_SCOS_GUI.UserData.resetSCOS_clock = tic;
+    set(hObject,'String','Stop SCOS')
+else
+    handles.fig_SCOS_GUI.UserData.calcSCOS_Flag = false;
+    handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock = handles.fig_SCOS_GUI.UserData.scosTime(find(isnan(handles.fig_SCOS_GUI.UserData.scosTime),1)-1);
+    set(hObject,'String','Start SCOS')
+    % handles.fig_SCOS_GUI.UserData.resetSCOS_clock = tic;
 end
-handles.fig_SCOS_GUI.UserData.calcSCOS_Flag = true;
-handles.fig_SCOS_GUI.UserData.resetSCOS_clock = tic;
 
 % --- Executes on button reset Contrast graph .
 function btn_reset_Callback(hObject, eventdata, handles)
@@ -73,8 +81,8 @@ handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock = 0;
 
 % --- Executes on button stop Contrast calc
 function btn_stop_Callback(hObject, eventdata, handles)
-handles.fig_SCOS_GUI.UserData.calcSCOS_Flag = false;
-handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock = handles.fig_SCOS_GUI.UserData.scosTime(find(isnan(handles.fig_SCOS_GUI.UserData.scosTime),1)-1); 
+% handles.fig_SCOS_GUI.UserData.calcSCOS_Flag = false;
+% handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock = handles.fig_SCOS_GUI.UserData.scosTime(find(isnan(handles.fig_SCOS_GUI.UserData.scosTime),1)-1); 
 % handles.fig_SCOS_GUI.UserData.resetSCOS_clock = tic;
 
 function edt_exposureTime_Callback(hObject, eventdata, handles)
@@ -176,16 +184,16 @@ function chk_externalTrigger_Callback(hObject, eventdata, handles)
         src = getselectedsource(vid);
 
         if hObject.Value
+            set( src, 'TriggerMode', 'on');
             src.TriggerMode = 'on';
             set( src, 'AcquisitionFrameRateEnable' , 'False'); % not sure it's really needed
         else
-            set( src,'TriggerMode', 'off');
+            set( src, 'TriggerMode', 'off');
             set( src, 'AcquisitionFrameRateEnable' , 'True'); 
             frameRate = get(src,'AcquisitionFrameRate');
         end
         if ~vid_was_valid
             delete(vid);
-            clear vid
         end
     else
         if hObject.Value
@@ -218,10 +226,6 @@ function chk_externalTrigger_Callback(hObject, eventdata, handles)
         end
         handles.fig_SCOS_GUI.UserData.last_external_trigger_frequency = answer{1};
         
-%         set(handles.edt_frameRate,'Enable','off'); % VIKA TBD : in edt_frameRate Callback add set(handles.edt_frameRate,'Value',___);
-%                                                                 and set src only if we are not in external trigger mode
-%                                                                 and change also handles.fig_SCOS_GUI.UserData.last_external_trigger_frequency
-%                                                                 in calc SCOS we can take this value always
         set(handles.txt_frameRate,'String','External Trigger Frame Rate')
         set(handles.edt_frameRate,'Value',str2double(answer{1}));
         set(handles.edt_frameRate,'String',answer{1})
@@ -232,26 +236,32 @@ function chk_externalTrigger_Callback(hObject, eventdata, handles)
     end
     
 
-function (hObject, eventdata, handles)
-% hObject    handle to edt_frameRate (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
+function edt_frameRate_Callback(hObject, eventdata, handles)
 
-% Hints: get(hObject,'String') returns contents of edt_frameRate as text
-%        str2double(get(hObject,'String')) returns contents of edt_frameRate as a double
-if isvalid(handles.fig_SCOS_GUI.UserData.src)
-    
-    handles.fig_SCOS_GUI.UserData.src.AcquisitionFrameRateEnable = 'True';
-    handles.fig_SCOS_GUI.UserData.src.AcquisitionFrameRate = str2double(hObject.String);
-else
-    vid = videoinput("gentl", 1, "Mono8");
-    src = getselectedsource(vid);
-    set( handles.fig_SCOS_GUI.UserData.src, 'AcquisitionFrameRateEnable','True');
-    src.AcquisitionFrameRate = str2double(hObject.String);
-    delete(vid);
-    btn_startVideo_Callback(handles.btn_startVideo, eventdata, handles);
+frameRateNum = str2double(hObject.String);
+if isnan(frameRateNum)
+    errordlg('Frame Rate must be a number');
+    set(handles.edt_frameRate,'String',num2str(hObject.Value));
+    return;
 end
 
+set(handles.edt_frameRate,'Value',frameRateNum);
+
+if handles.chk_externalTrigger.Value % we are working with external trigger
+    handles.fig_SCOS_GUI.UserData.last_external_trigger_frequency = frameRate;
+else     % we are working with internal camera frame rate 
+    if isvalid(handles.fig_SCOS_GUI.UserData.src)
+        handles.fig_SCOS_GUI.UserData.src.AcquisitionFrameRateEnable = 'True';
+        handles.fig_SCOS_GUI.UserData.src.AcquisitionFrameRate = frameRateNum;
+    else
+        vid = videoinput("gentl", 1, "Mono8");
+        src = getselectedsource(vid);
+        src.AcquisitionFrameRateEnable = 'True';
+        src.AcquisitionFrameRate = frameRateNum;
+        delete(vid);
+        %btn_startVideo_Callback(handles.btn_startVideo, eventdata, handles);
+    end
+end
 % --- Executes during object creation, after setting all properties.
 function edt_frameRate_CreateFcn(hObject, eventdata, handles)
 % hObject    handle to edt_frameRate (see GCBO)
@@ -345,23 +355,15 @@ function btn_record_Callback(hObject, eventdata, handles)
 % hObject    handle to btn_record (see GCBO)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
-
-
-handles.fig_SCOS_GUI.UserData.stopVideoFlag = true;
-pause(0.02);
-if isvalid(handles.fig_SCOS_GUI.UserData.src)
-    delete(handles.fig_SCOS_GUI.UserData.vid);
-    objects = imaqfind;
-    if numel(objects)>0;  delete(objects(1)); end
-end
-       
-        
-% handles.fig_SCOS_GUI.UserData.vid
+              
 currFolder = fileparts(mfilename('fullpath'));
 last_folder_matfile = [currFolder '\SCOS_GUI_lastrec.mat'];
 if exist(last_folder_matfile,'file')
      tmp = load(last_folder_matfile);
      last_record_folder = tmp.recFolder;
+     if ~exist(last_record_folder,'dir')
+         last_record_folder = 0;
+     end
 else
     last_record_folder = 0;
 end
@@ -371,15 +373,35 @@ if  last_record_folder == 0
 end
 
 recFolder = uigetdir(last_record_folder,'Please Select Folder in which to save recording');
+if recFolder==0
+    return;
+end
 save(last_folder_matfile,'recFolder');
 
+% stop running video and delete all opened vid
+wasVideoRunning = handles.fig_SCOS_GUI.UserData.isVideoRunning;
+if wasVideoRunning
+    % stop video
+    handles.fig_SCOS_GUI.UserData.stopVideoFlag = true;
+    pause(0.02);
+    if isvalid(handles.fig_SCOS_GUI.UserData.src) || isvalid(handles.fig_SCOS_GUI.UserData.vid)
+        delete(handles.fig_SCOS_GUI.UserData.vid);
+        objects = imaqfind;
+        if numel(objects)>0;  delete(objects(1)); end
+    end
+end
+
 if handles.chk_externalTrigger.Value
-    answer = inputdlg('What is the pulse generator frequency?','Pulse Generato frequence',[1 35]);
-    frameRate = str2double(answer);
+    %answer = inputdlg('What is the pulse generator frequency?','Pulse Generato frequence',[1 35]);
+    frameRate = str2double(handles.edt_frameRate.String);
+    if isnan(frameRate)
+        errordlg('Wrong Frame Rate');
+        return;
+    end
 else
     vid = videoinput("gentl", 1, "Mono8");
     src = getselectedsource(vid);
-    frameRate = get(src,'AcquisitionFrameRate');
+    frameRate = round(get(src,'AcquisitionFrameRate'),5);
     delete(vid);
 end
 
@@ -402,6 +424,10 @@ else
     SCOSvsTimeUpdated( recName ,windowSize, 1  );
 end
 
+if wasVideoRunning
+    set(handles.btn_startVideo,'String','Start Video');
+    btn_startVideo_Callback(handles.btn_startVideo, eventdata, handles)
+end
 
 
 function edt_nOfFrames_Callback(hObject, eventdata, handles)
@@ -485,6 +511,8 @@ function btn_AutoClim_Callback(hObject, eventdata, handles)
 % --- Executes when user attempts to close fig_SCOS_GUI.
 function fig_SCOS_GUI_CloseRequestFcn(hObject, eventdata, handles)
 
+handles.fig_SCOS_GUI.UserData.isVideoRunning = false;
+    
 if isfield(hObject.UserData,'vid') && isvalid(hObject.UserData.vid)
     if isrunning(hObject.UserData.vid)
         stop(hObject.UserData.vid);
@@ -557,7 +585,7 @@ if strcmp(get(hObject,'String'),'Stop Video')
         vidobj = imaqfind;
         if numel(vidobj)>0;  stop(vidobj(1)); delete(vidobj(1)); end
     end
-    set(hObject,'String','Run Video')
+    % set(hObject,'String','Run Video') - > this will happen after video is stopped in other instance of the same function
 else %  get(hObject,'String') == 'Run Video'    
     try
         if isfield(handles.fig_SCOS_GUI.UserData,'vid') && ~isvalid(handles.fig_SCOS_GUI.UserData.vid)
@@ -583,13 +611,8 @@ else %  get(hObject,'String') == 'Run Video'
         end
     end
     handles.fig_SCOS_GUI.UserData.isVideoRunning = true;
-
-    % if succeded -> cannot start again
-    set(hObject,'enable','off');
-
-    src = getselectedsource(vid);
-    % src.TriggerMode = 'On';
-    src.TriggerMode
+    
+    src = getselectedsource(vid);    
     handles.fig_SCOS_GUI.UserData.src = src;
 
     if strcmpi(src.TriggerMode,'On') %handles.chk_externalTrigger.Value
@@ -666,7 +689,8 @@ else %  get(hObject,'String') == 'Run Video'
             mask = true(size(im)); %CreateCircleMask(size(im));
         end
         meanI = round(mean(im(mask)));
-        set(handles.txt_avgI,'String',[ '<I>=' num2str(meanI) 'DU'] );
+        pcntl = prctile(im(mask),[5 95]);
+        set(handles.txt_avgI,'String',[ '<I>=' num2str(meanI) 'DU;   5%I  =' num2str(pcntl(2)) 'DU;   95%I =' num2str(pcntl(1)) 'DU  '   ]);        
 
         % --- Calc Scos ---------------------------
         if handles.fig_SCOS_GUI.UserData.calcSCOS_Flag
@@ -708,8 +732,9 @@ else %  get(hObject,'String') == 'Run Video'
          %start(vid);
          pause(pauseInterval);
 
+         % if still there is not frames -> while loop untill there are frames available
          temp_counter = 0;
-         while handles.fig_SCOS_GUI.UserData.isVideoRunning && isvalid(vid) && ~vid.FramesAvailable && temp_counter < 6 
+         while handles.fig_SCOS_GUI.UserData.isVideoRunning && isvalid(vid) && ~vid.FramesAvailable && temp_counter < Inf 
              pause(pauseInterval/2); 
              temp_counter = temp_counter + 1;
          end
@@ -720,7 +745,6 @@ else %  get(hObject,'String') == 'Run Video'
     if isvalid(vid) 
         stop(vid)
         delete(vid);
-        clear(vid)
     end
 
     fprintf('\n')
