@@ -708,16 +708,19 @@ else %  get(hObject,'String') == 'Start Video'
            actualGain = ConvertGain(curr_gain,8,10.5e3);      
 
            stdIm = stdfilt(im,true(windowSize));
-
            meanIm = imfilter(im, true(windowSize)/windowSize^2,'conv','same');
-           handles.fig_SCOS_GUI.UserData.scosData(scos_ind) =  mean((stdIm(mask)- actualGain*meanIm(mask) - readoutN -1/12)./meanIm(mask))^2  ;
+           meanImSquare = meanIm.^2;
+           Kraw = (stdIm.^2)./meanImSquare ;
+           
+           handles.fig_SCOS_GUI.UserData.scosData(scos_ind) = mean(Kraw(mask) - actualGain./meanIm(mask) - ( readoutN^2 + 1/12)./meanImSquare(mask) );   % Kappa_corrected 
+           %handles.fig_SCOS_GUI.UserData.scosData(scos_ind) =  mean( (stdIm(mask)- actualGain*meanIm(mask) - readoutN -1/12)./meanIm(mask) )^2  ;
            tm = toc(handles.fig_SCOS_GUI.UserData.resetSCOS_clock) ;
 
            handles.fig_SCOS_GUI.UserData.scosTime(scos_ind) =  tm/60 + handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock  ; % /60 in order to convert to [min] from [sec]
 
-           plot(handles.ax_scos,handles.fig_SCOS_GUI.UserData.scosTime(1:scos_ind),handles.fig_SCOS_GUI.UserData.scosData(1:scos_ind),'-');
+           plot(handles.ax_scos,1/handles.fig_SCOS_GUI.UserData.scosTime(1:scos_ind),handles.fig_SCOS_GUI.UserData.scosData(1:scos_ind),'-');
            % set x and y axis labels
-           ylabel(handles.ax_scos,'var(I)/<I>');
+           ylabel(handles.ax_scos,'1/kappa');
            xlabel(handles.ax_scos,'time [min]');
            set(handles.ax_scos,'XLim',currXlim  )
            
