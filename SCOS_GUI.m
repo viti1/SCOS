@@ -42,9 +42,9 @@ addpath([fileparts(mfilename('fullpath')) '\baseFunc']);
 handles.fig_SCOS_GUI.UserData.calcSCOS_Flag = false;
 handles.fig_SCOS_GUI.UserData.scosData = nan(1,10000);
 handles.fig_SCOS_GUI.UserData.scosTime = nan(1,10000);
-handles.fig_SCOS_GUI.UserData.resetSCOS_Flag = false;
+handles.fig_SCOS_GUI.UserData.resetSCOS_Flag = true;
 handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock = 0;
-
+handles.fig_SCOS_GUI.UserData.calcSCOS_beforeVideoStop_Flag = false;
 handles.fig_SCOS_GUI.UserData.isVideoRunning = false;
 
 
@@ -58,14 +58,14 @@ varargout{1} = handles.output;
 function btn_start_Callback(hObject, eventdata, handles)
 if isequal(hObject.String,'Start SCOS') % 
     if handles.fig_SCOS_GUI.UserData.calcSCOS_Flag
-        return; % do nothing
+        return; % do nothing - > theoretically not suppose to get here
     end
     handles.fig_SCOS_GUI.UserData.calcSCOS_Flag = true;
     handles.fig_SCOS_GUI.UserData.resetSCOS_clock = tic;
     set(hObject,'String','Stop SCOS')
 else
     handles.fig_SCOS_GUI.UserData.calcSCOS_Flag = false;
-    handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock = handles.fig_SCOS_GUI.UserData.scosTime(find(isnan(handles.fig_SCOS_GUI.UserData.scosTime),1)-1);
+    handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock = handles.fig_SCOS_GUI.UserData.scosTime(find(isnan(handles.fig_SCOS_GUI.UserData.scosTime),1)-1)  ; 
     set(hObject,'String','Start SCOS')
     % handles.fig_SCOS_GUI.UserData.resetSCOS_clock = tic;
 end
@@ -73,17 +73,9 @@ end
 % --- Executes on button reset Contrast graph .
 function btn_reset_Callback(hObject, eventdata, handles)
 handles.fig_SCOS_GUI.UserData.resetSCOS_Flag = true;
-% if handles.fig_SCOS_GUI.UserData.stopVideoFlag
-    plot(handles.ax_scos,0,0); % reset
-% end
+plot(handles.ax_scos,0,0); % reset axes
 handles.fig_SCOS_GUI.UserData.resetSCOS_clock = tic;
 handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock = 0;
-
-% --- Executes on button stop Contrast calc
-function btn_stop_Callback(hObject, eventdata, handles)
-% handles.fig_SCOS_GUI.UserData.calcSCOS_Flag = false;
-% handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock = handles.fig_SCOS_GUI.UserData.scosTime(find(isnan(handles.fig_SCOS_GUI.UserData.scosTime),1)-1); 
-% handles.fig_SCOS_GUI.UserData.resetSCOS_clock = tic;
 
 function edt_exposureTime_Callback(hObject, eventdata, handles)
 % hObject    handle to edt_exposureTime (see GCBO)
@@ -214,7 +206,7 @@ function chk_externalTrigger_Callback(hObject, eventdata, handles)
             default_ans = '';
         end
         
-        answer = inputdlg('What is the frequency [Hz] of external trigger? ' , '', [1 45], {default_ans});
+        answer = inputdlg('What is the frequency of external trigger? [Hz]' , '', [1 45], {default_ans});
         if isnan(str2double(answer{1})); errordlg('frequency must be a number');
             set(hObject,'Value',0)
             return;
@@ -226,11 +218,11 @@ function chk_externalTrigger_Callback(hObject, eventdata, handles)
         end
         handles.fig_SCOS_GUI.UserData.last_external_trigger_frequency = answer{1};
         
-        set(handles.txt_frameRate,'String','External Trigger Frame Rate')
+        set(handles.txt_frameRate,'String','External Trigger Frame Rate [Hz]')
         set(handles.edt_frameRate,'Value',str2double(answer{1}));
         set(handles.edt_frameRate,'String',answer{1})
     else % returned back to be camera inner trigger
-        set(handles.txt_frameRate,'String','Frame Rate')
+        set(handles.txt_frameRate,'String','Frame Rate [Hz]')
         set(handles.edt_frameRate,'Value', frameRate );
         set(handles.edt_frameRate,'String', num2str(frameRate ))        
     end
@@ -508,23 +500,6 @@ function btn_AutoClim_Callback(hObject, eventdata, handles)
  end
  set(handles.ax_image,'CLim',[ lowerLim upperLim]);
         
-% --- Executes when user attempts to close fig_SCOS_GUI.
-function fig_SCOS_GUI_CloseRequestFcn(hObject, eventdata, handles)
-
-handles.fig_SCOS_GUI.UserData.isVideoRunning = false;
-    
-if isfield(hObject.UserData,'vid') && isvalid(hObject.UserData.vid)
-    if isrunning(hObject.UserData.vid)
-        stop(hObject.UserData.vid);
-    end
-    delete(hObject.UserData.vid);
-end
-
-objects = imaqfind;
-if numel(objects)>0;  delete(objects(1)); end
-
-delete(hObject); %closes the figure
-
 
 
 % --- If Enable == 'on', executes on mouse press in 5 pixel border.
@@ -567,6 +542,8 @@ else
    if numel(objects)>0;  delete(objects(1)); end
 end
 
+function ax_scos_CreateFcn(hObject, eventdata, handles)
+
 
 % --- Executes on button press in btn_startVideo.
 function btn_startVideo_Callback(hObject, eventdata, handles)
@@ -575,7 +552,16 @@ function btn_startVideo_Callback(hObject, eventdata, handles)
 % handles    structure with handles and user data (see GUIDATA)
 
 if strcmp(get(hObject,'String'),'Stop Video')
-    handles.fig_SCOS_GUI.UserData.isVideoRunning = false;
+    % stop calculating and plotting scos
+    handles.fig_SCOS_GUI.UserData.calcSCOS_beforeVideoStop_Flag = handles.fig_SCOS_GUI.UserData.calcSCOS_Flag;
+    if handles.fig_SCOS_GUI.UserData.calcSCOS_Flag  
+        btn_start_Callback(handles.btn_start, eventdata, handles)
+    end
+    
+    % Stop Video
+    handles.fig_SCOS_GUI.UserData.isVideoRunning = false; % -> will stop the loop in previous instarnce of this function    
+
+    % delete vid
     if isfield(handles.fig_SCOS_GUI.UserData.vid,'vid')
         vid = handles.fig_SCOS_GUI.UserData.vid;
         stop(vid)
@@ -585,8 +571,9 @@ if strcmp(get(hObject,'String'),'Stop Video')
         vidobj = imaqfind;
         if numel(vidobj)>0;  stop(vidobj(1)); delete(vidobj(1)); end
     end
-    % set(hObject,'String','Run Video') - > this will happen after video is stopped in other instance of the same function
-else %  get(hObject,'String') == 'Run Video'    
+    
+    % set(hObject,'String','Start Video') - > this will happen after video is stopped in other instance of the same function
+else %  get(hObject,'String') == 'Start Video'    
     try
         if isfield(handles.fig_SCOS_GUI.UserData,'vid') && ~isvalid(handles.fig_SCOS_GUI.UserData.vid)
             delete(handles.fig_SCOS_GUI.UserData.vid);
@@ -635,13 +622,11 @@ else %  get(hObject,'String') == 'Run Video'
 
     detectorFolder = [fileparts(fileparts(mfilename('fullpath'))) '\Records\NoiseAndBackground\Basler_1440GS_Vika01\Mono8'];
     dData = load([detectorFolder '\ReadNoise\vsGain\readNoiseVsGain.mat']);  % detector Data
-
-    k = 1; scos_ind = 1;
-    handles.fig_SCOS_GUI.UserData.scosData = nan(1,10000);
-    handles.fig_SCOS_GUI.UserData.scosTime = nan(1,10000);
+   
+    k = 1;    
     if ~isrunning(vid); start(vid); end
 
-    pauseTriggerMode = 0.5;
+    pauseTriggerMode = 0.05;
     pauseUsualMode = 0.01;
 
     if strcmpi(src.TriggerMode,'On')
@@ -651,6 +636,15 @@ else %  get(hObject,'String') == 'Run Video'
     end
     pause(pauseInterval);
     set(hObject,'String','Stop Video');
+    scos_ind = find(isnan(handles.fig_SCOS_GUI.UserData.scosTime),1);
+    if isempty(scos_ind)
+        scos_ind = numel(handles.fig_SCOS_GUI.UserData.scosTime) + 1;        
+    end
+    currXlim = get(handles.ax_scos,'XLim');
+    
+    if handles.fig_SCOS_GUI.UserData.calcSCOS_beforeVideoStop_Flag
+        btn_start_Callback(handles.btn_start, eventdata, handles)
+    end
     while handles.fig_SCOS_GUI.UserData.isVideoRunning  && isvalid(handles.fig_SCOS_GUI.UserData.src) && isvalid(vid) && vid.FramesAvailable  % VIKA TBD! 
         % ~handles.fig_SCOS_GUI.UserData.stopVideoFlag
 
@@ -690,7 +684,7 @@ else %  get(hObject,'String') == 'Run Video'
         end
         meanI = round(mean(im(mask)));
         pcntl = prctile(im(mask),[5 95]);
-        set(handles.txt_avgI,'String',[ '<I>=' num2str(meanI) 'DU;   5%I  =' num2str(pcntl(2)) 'DU;   95%I =' num2str(pcntl(1)) 'DU  '   ]);        
+        set(handles.txt_avgI,'String',[ '<I>=' num2str(meanI) 'DU;   5%I  =' num2str(pcntl(1)) 'DU;   95%I =' num2str(pcntl(2)) 'DU  '   ]);        
 
         % --- Calc Scos ---------------------------
         if handles.fig_SCOS_GUI.UserData.calcSCOS_Flag
@@ -699,8 +693,10 @@ else %  get(hObject,'String') == 'Run Video'
                handles.fig_SCOS_GUI.UserData.scosTime = nan(1,10000);
                handles.fig_SCOS_GUI.UserData.resetSCOS_Flag = false;
                scos_ind=1;
+%                timeJump = 0.5 ; %  min
+               currXlim = [0 0.5]; 
            end
-           if scos_ind > size(handles.fig_SCOS_GUI.UserData.scosData)
+           if scos_ind > length(handles.fig_SCOS_GUI.UserData.scosData)
                handles.fig_SCOS_GUI.UserData.scosData = [ handles.fig_SCOS_GUI.scosData nan(1,10000)] ;
                handles.fig_SCOS_GUI.UserData.scosTime = [ handles.fig_SCOS_GUI.scosTime nan(1,10000)] ;
            end
@@ -717,16 +713,24 @@ else %  get(hObject,'String') == 'Run Video'
            handles.fig_SCOS_GUI.UserData.scosData(scos_ind) =  mean((stdIm(mask)- actualGain*meanIm(mask) - readoutN -1/12)./meanIm(mask))^2  ;
            tm = toc(handles.fig_SCOS_GUI.UserData.resetSCOS_clock) ;
 
-           handles.fig_SCOS_GUI.UserData.scosTime(scos_ind) = tm + handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock;
+           handles.fig_SCOS_GUI.UserData.scosTime(scos_ind) =  tm/60 + handles.fig_SCOS_GUI.UserData.calcSCOS_lastClock  ; % /60 in order to convert to [min] from [sec]
 
            plot(handles.ax_scos,handles.fig_SCOS_GUI.UserData.scosTime(1:scos_ind),handles.fig_SCOS_GUI.UserData.scosData(1:scos_ind),'-');
+           % set x and y axis labels
+           ylabel(handles.ax_scos,'var(I)/<I>');
+           xlabel(handles.ax_scos,'time [min]');
+           set(handles.ax_scos,'XLim',currXlim  )
+           
+           % change XLim if it's not enough            
+%            curr_xlim = get(handles.ax_scos,'XLim');
+           if currXlim(2) <= handles.fig_SCOS_GUI.UserData.scosTime(scos_ind)
+                currXlim(2) = 2*currXlim(2);
+%                 timeJump = 2*curr_xlim(2);
+%                 set(handles.ax_scos,'XLim',[0 timeJump*( mod(handles.fig_SCOS_GUI.UserData.scosTime(scos_ind),timeJump) + 1) ]); 
+%                 set(handles.ax_scos,'XLim',[curr_xlim(1) (2*curr_xlim(2)) ] )
+           end
+
            scos_ind = scos_ind + 1;
-           timeJump = 10; %set
-           set(handles.ax_scos,'XLim',[0 (tm - mod(tm,timeJump) + timeJump)]) 
-           if k==1
-               ylabel(handles.ax_scos,'var(I)/<I>');
-               xlabel(handles.ax_scos,'time [ms]')
-           end       
         end       
 
          %start(vid);
@@ -748,5 +752,24 @@ else %  get(hObject,'String') == 'Run Video'
     end
 
     fprintf('\n')
-    set(hObject,'String','Run Video');
+    set(hObject,'String','Start Video');
 end
+             
+% --- Executes when user attempts to close fig_SCOS_GUI.
+function fig_SCOS_GUI_CloseRequestFcn(hObject, eventdata, handles)
+
+handles.fig_SCOS_GUI.UserData.isVideoRunning = false;
+
+pause(0.1); % let it stop from the btn_startVideo_Callback
+
+if isfield(hObject.UserData,'vid') && isvalid(hObject.UserData.vid)
+    if isrunning(hObject.UserData.vid)
+        stop(hObject.UserData.vid);
+    end
+    delete(hObject.UserData.vid);
+end
+
+objects = imaqfind;
+if numel(objects)>0;  delete(objects(1)); end
+
+delete(hObject); %closes the figure
