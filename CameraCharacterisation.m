@@ -90,7 +90,7 @@ readNoiseBLFolder = [ analysisFolder filesep 'ReadNoise\vsBlackLevel'];
 if rerecord_RN
     setupParams.Cover = 'On';
 
-    BL.gainArr = 0:15:30;
+    BL.gainArr = [0:15:30,36];
     BL.blackLevelArr = [0:6,10:10:30];
     prefix = 'Cover';
     suffix = '';

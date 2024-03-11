@@ -20,8 +20,8 @@
 %                boolaen map (same size as record two first dimentions
 %  ---------------------------------------------------------------------------------------------------------
 
-function [ timeVec, rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, imMeanVec , info] = ...
-    SCOSvsTime(recordName,windowSize,plotFlag,maskInput)
+function [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , info] = ...
+    SCOSvsTimeMultichannel(recordName,windowSize,plotFlag,resetMask)
 if nargin <3
     plotFlag = true;
 end
@@ -31,6 +31,7 @@ timePeriodForP2P = 2; % [s]
 %% Check input parameters
 if nargin == 0 % GUI mode
     plotFlag = 1;
+    resetMask = 0;
     [recordName] = uigetdir();
     if recordName == 0; return; end % if 'Cancel' was pressed
     if numel(dir([recordName, '\*.avi' ])) > 1 
@@ -66,120 +67,87 @@ if exist(recordName,'file') == 7 % it's a folder
 else % it's a file
     recSavePrefix = [ recordName(1:find(recordName=='.',1,'last')-1) '_' ];
 end
-
-[ first_frame ] = ReadRecord(recordName,1); 
-
 maskFile = [recSavePrefix 'Mask.mat'];
-if exist('maskInput','var')
-    if isequal(maskInput, 1)
-        mask = true(size(first_frame));
-    elseif islogical(maskInput)
-        if ~isequal( size(maskInput), size(first_frame) ) 
-            error('wrong maskInput');
-        end
-        mask = maskInput;
-    else
-        error('wrong maskInput type');
-    end
-    loadExistingFile_flag = 0;
-else    
-    if ~exist(maskFile,'file')
-        % TBD : add automatic circle recognition
-        loadExistingFile_flag = 0;    
-    else
-        if nargin == 0 % GUI mode
-            answer = questdlg('Mask file already exist, do you want to define it again?','','Yes','No','No');
-            loadExistingFile_flag = strcmp(answer,'No');
-        else      % Command line mode -> load the saved mask 
-            loadExistingFile_flag = 1;
-        end
-    end
-end
 
-if ~exist('mask','var')    
-    if ~loadExistingFile_flag
-        %% ask the user to mark a circle on the image
+% delete(maskFile)
+if ~exist(maskFile,'file') || resetMask
+    im = mean(ReadRecord(recordName, min(30,GetNumOfFrames(recordName))),3);
+    expectedRadius = 125;
+    [ masks, totMask, channels , figIm , h_circles] = autoFindRIOMultichannel(im,expectedRadius);
+    set(figIm,'Position',[100,50,1200,800])
+    if numel(masks)<7
+        answer = questdlg('Draw more channels?', '','Yes','No','Discard Existing','Yes');
+        drawOneMore = strcmp(answer,'Yes') || strcmp(answer,'Discard Existing') ;
+        [x,y] = meshgrid(1:size(im,2),1:size(im,1));
 
-        f = figure('position',[50,50,1200,800]); imagesc(first_frame); colormap gray; colorbar
-        title(rawName,'interpreter','none');
-        totMask  = false(size(first_frame,1),size(first_frame,2));    
-        drawOneMore = true;
-        k = 1; circles = struct();
+        if strcmp(answer,'Discard Existing')
+            masks = {};
+            totMask = false(size(totMask));
+            channels.Centers = [];
+            channels.Radii = [];
+            delete(h_circles);
+        end
+                    
+        k = numel(masks)+1; 
         while drawOneMore
             circ = drawcircle('Color','r','FaceAlpha',0.2);
-            circles(k).Center = circ.Center; 
-            circles(k).Radius = circ.Radius;
-            k=k+1;
-            [x,y] = meshgrid(1:size(first_frame,2),1:size(first_frame,1));
-            
-            masks{k} = false(size(first_frame,1),size(first_frame,2)); %#ok<AGROW>
-            masks{k}((x-circ.Center(1)).^2 + (y-circ.Center(2)).^2 < circ.Radius^2 ) = true; %#ok<AGROW>
+            channels.Centers(k,:) = circ.Center;
+            channels.Radii(k) = circ.Radius;
+
+            masks{k} = false(size(im,1),size(im,2));
+            masks{k}((x-circ.Center(1)).^2 + (y-circ.Center(2)).^2 < circ.Radius^2 ) = true; 
             totMask = masks{k} | totMask ;
             answer = questdlg('One more channel?', '','Yes','No','Yes');
             drawOneMore = strcmp(answer,'Yes');
+            k=k+1;
         end
-        
-        nOfChannels = numel(circles);
-        save(maskFile,'mask','circles');
-        close(f)
-    else 
-        load(maskFile)
-    %     figure; imshowpair(first_frame,mask);  
+
+        if exist('imfig','var'); close(imfig); end  
     end
+
+
+    save(maskFile,'channels','masks','totMask');
 else
-    
+    load(maskFile);
 end
 
 %% Read Record
 disp(['Reading Record "' recordName '" ... '])
-[ head_rec , info] = ReadRecord(recordName);
+info = GetRecordInfo(recordName);
+
+%% Set params
+% detectorFolder = [fileparts(fileparts(mfilename('fullpath'))) '\Records\NoiseAndBackground\Basler_1440GS_Vika01\Mono8'];
+% dData = load([detectorFolder '\ReadNoise\vsGain\readNoiseVsGain.mat']);  % detector Data
+% nOfBits = 8;
+% maxCapacity = 10.5e3;% [e]
+% actualGain = ConvertGain(info.name.Gain,nOfBits,maxCapacity);
+% readoutN   = interp1(dData.gainArr,dData.totNoise, info.name.Gain ,'spline');
 
 %%  Calc Specle Contrast
 disp(['Calculation SCOS on "' recordName '" ... '])
-nOfFrames = size(head_rec,3);
+nOfFrames = GetNumOfFrames(recordName);
+nOfChannels = numel(masks);
 
-%% Load rellevant parameters from camera characterizaion file 
-% dData = load('./BeslerAce1440-200u_.mat');  % detector Data
-% readoutN   = interp1(detectorData.gainArr,detectorData.readoutNoise, info.Gain ,'spline');
-% actualGain = 10^(info.Gain+detectorData.g0); 
-% H = fspecial('average', [1 1]*windowSize);
-% backgroundMFile = [ recSavePrefix 'background.mat' ]; 
-% if exist(backgroundMFile,'file')
-%     bgS = load(backgroundMFile);
-%     background = bgS.recMean;
-% else
-%     if exist([ recSavePrefix 'background' ],'file')
-%         backgroundRecFile = ReadRecord([ recSavePrefix 'background' ]);
-%         if exist(RecordName,'file') ~= 7 % it's not a folder
-%             [~,~,ext] = fileparts(RecordName);
-%             backgroundRecFile = [ backgroundRecFile ext ];
-%         end
-%         backgroundRec = ReadRecord(backgroundRecFile);
-%     %     background = PixFix(mean(backgroundRec,3),dData.BPMask);
-%         background = mean(backgroundRec,3);
-%     else
-%         background = zeros(size(first_frame));
-%     end
-% end
-% background = zeros(size(first_frame));
-[rawSpeckleVar , rawSpeckleContrast , corrSpeckleVar , corrSpeckleContrast , imMeanVec] = InitNaN([nOfFrames 1]);
+[ rawSpeckleContrast , corrSpeckleContrast , meanVec ] = InitNaN([nOfFrames 1],nOfChannels);
 for i=1:nOfFrames
-    im = head_rec(:,:,i);
+    im = ReadRecord(recordName,1,i);
     stdIm = stdfilt(im,true(windowSize));
+    meanIm = imfilter(im, true(windowSize)/windowSize^2,'conv','same'); % TBD!!! add Xiaojun algorithm
+    meanImSquare = meanIm.^2;
+    Kraw = (stdIm.^2)./meanImSquare ;
     for k = 1:nOfChannels
-        meanPerChannel{k} = mean(im(masks{k}));
-        rawSpeckleVar{k}(i) = mean(stdIm(masks{k}))^2;
-        rawSpeckleContrast{k}(i) = rawSpeckleVar(i)/meanFrame^2;
+        rawSpeckleContrast{k}(i) = mean(Kraw(masks{k}));
+        % corrSpeckleContrast{k}(i) = mean(Kraw(masks{k}) - actualGain./meanIm(masks{k}) - ( readoutN^2 + 1/12)./meanImSquare(masks{k}) );
+        meanVec{k}(i) = mean(im(masks{k}));
     end
-    imMeanVec(i) = meanFrame; % mean(meanIm);
 end
-IMean = mean(imMeanVec);
 
+% TBD!! add SNR graph for each channel for corrected and not - corrected
 %% Create Time vector
 if ~isfield(info.name,'FR') || isnan(info.name.FR)
     error('Frame Rate must be part of the recording name as "FR"');
 end
-frameRate = info.name.FR; % TBD
+frameRate = info.name.FR; 
 
 timeVec = (0:(nOfFrames-1))'*(1/frameRate) ;   % FR = FrameRate
 p2p_time = timeVec<timePeriodForP2P;
@@ -187,35 +155,37 @@ p2p_time = timeVec<timePeriodForP2P;
 %% Plot
 stdStr = sprintf('Std%dx%d',windowSize,windowSize);
 
-infoFields = fieldnames(info.name);
-if isfield(info.name,'SDS')
-    titleStr =  [ infoFields{1} ' SDS=' num2str(info.name.SDS)  '; exp=' num2str(info.name.expT)  'ms; Gain='  num2str(info.name.Gain) 'dB' ];
-else
-    titleStr =  [ infoFields{1} '; exp=' num2str(info.name.expT)  'ms; Gain='  num2str(info.name.Gain) 'dB' ];
-end
+% infoFields = fieldnames(info.name);
+% titleStr =  [ infoFields{1} '; exp=' num2str(info.name.expT)  'ms; Gain='  num2str(info.name.Gain) 'dB' ];
+
     
 if plotFlag
-        fig = figure('name',['SCOS ' recordName]);
-    subplot(3,1,1);
-        plot(timeVec,rawSpeckleVar)
-        ylabel('Variance [DU^2]')
-%         title({ rawName , ['p2p = ' ]})
-        title(titleStr)
-        subplot(3,1,2);
-        plot(timeVec,rawSpeckleContrast)
-        ylabel('Contrast (var/I^2)')
-    subplot(3,1,3);
-        plot(timeVec,imMeanVec);
-        ylabel('I [DU]')
+    fig1 = figure('name',['SCOS ' recordName],'Position',[10 80 2025 970]);
+    for k = 1:nOfChannels
+        subplot(nOfChannels,3,3*k-2);
+            plot(timeVec,meanVec{k});
+            title(sprintf('Channel %d - mean I (<I>=%.0fDU)',k,mean(meanVec{k})));
+        subplot(nOfChannels,3,3*k-1);
+            plot(timeVec,rawSpeckleContrast{k})
+            ylabel('Kraw^2')
+            title(sprintf('Channel %d - Raw (<I>=%.0fDU)',k,mean(meanVec{k})));
+        % subplot(nOfChannels,3,3*k);
+        %     plot(timeVec,corrSpeckleContrast{k})
+        %     ylabel('Kf^2')
+        %     title(sprintf('Channel %d - Corrected partly ',k));
+    end
 end
 
-for plot_i=1:3
-    subplot(3,1,plot_i);
+for plot_i=1:nOfChannels*3
+    subplot(nOfChannels,3,plot_i);
+    xlim([0 timeVec(end)]);
     xlabel('Time [s]')
 end
+
+%TBD add SNR DATA!
 %% Save
 if exist('fig','var')
-    savefig(fig,[recSavePrefix 'Local' stdStr '_plot.fig']);
-    save([recSavePrefix 'Local' stdStr '.mat'],'timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast','rawSpeckleVar','corrSpeckleVar', 'imMeanVec', 'info', 'recordName','windowSize');
+    savefig(fig1,[recSavePrefix 'Local' stdStr '_plot.fig']);
+    save([recSavePrefix 'Local' stdStr '.mat'],'timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast','meanVec', 'info', 'recordName','windowSize');
 end
  
