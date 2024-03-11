@@ -1,4 +1,4 @@
-# Neurophotonics Group Bar-Ilan University
+# Optical Neuroimaging Lab Bar-Ilan University
 ## 1. PlotSCOSvsTime.m
 _Calculate Speckle Contrast over Time_  
 ### Instructions:  
@@ -12,3 +12,10 @@ should be performed.
 Next you need to set the window size for culculation - usually 7 or 9 ( better to be an odd number).
 That it. Wait few seconds (depends on the recording length) and a figure with SCOS results will appear.
 It is automatically saved in the recording folder, as well as a .mat file with the vectors (SCOS vs Time).	
+
+## 2. SCOSloop.m
+_run PlotSCOSvsTime over all records in a folder_
+I'ts a scrips and available only in command line. 
+Change the 'recordsFolder' variable at the beginning of the code to your folder name.
+You can change the window size too.
+
