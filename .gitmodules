@@ -1,0 +1,4 @@
+[submodule "baseFunc"]
+	path = baseFunc
+	url = git@github.com:viti1/baseFunc.git
+	branch = main

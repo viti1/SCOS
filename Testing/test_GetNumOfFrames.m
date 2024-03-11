@@ -13,7 +13,7 @@ else
     testsFolder = testsFoldersList.global;  %#ok<UNRCH>
 end
 
-testsFolderFunc = fullfile(testsFolder,functionName); % testing folder of the specific function 
+testsFolderFunc = fullfile(testsFolder,'ReadRecord'); % testing folder of the specific function 
 if exist(testsFolderFunc,'file')~=7
     error(['Testing Folder "' testsFolderFunc '" does not exist!'])
 end
@@ -22,19 +22,20 @@ casesStruct = load( fullfile( testsFolderFunc ,['testScenatios_' functionName '.
 %% Run Over all Cases
 passArr=nan(size(casesStruct.cases));
 for test_i = 1:numel(casesStruct.cases)
+    %%
     testCase = casesStruct.cases(test_i);
     disp([10 'Test Case Num ' num2str(test_i) ':'])
     disp(testCase.input);
     
     try
-        currOutput = run_ReadRecord(testCase.input, testsFolderFunc);
+        [currOutput.nOfFrames , currOutput.imSize ] = GetNumOfFrames(fullfile(testsFolderFunc, testCase.input.recName));
         if ~isequaln(currOutput,testCase.output)
             passArr(test_i) = false;
             disp(' < FAILED >')
             [same, diff_recOutput, diff_groundTruth] = comp_struct(currOutput,testCase.output);
             disp('Fields that are different: ')
-            disp('    Expected : '); disp(diff_groundTruth)
-            disp('    Recieved : '); disp(diff_recOutput)
+            disp('  Expected : '); disp(diff_groundTruth)
+            disp('  Recieved : '); disp(diff_recOutput)
             warning(['Case ' num2str(test_i) ': wrong output! ']);
         else
             passArr(test_i) = true;
@@ -63,9 +64,11 @@ for test_i = 1:numel(casesStruct.cases)
             passArr(test_i) = false;
             disp(' < FAILED >')
             passArr(test_i) = false;
-            warning(['Case ' num2str(test_i) ':  FAILED on running ! ']);
+            warning(['Case ' num2str(test_i) ':  FAILED on running ! Error = "' err.message '"']);
+            
         end
     end
+    %%
 end
 
 disp([10 '~~~~~~~~~~~~~~~~~~~~~~ Summary ~~~~~~~~~~~~~~~~~~~~~~~~~' ])
