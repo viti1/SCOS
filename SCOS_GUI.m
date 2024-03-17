@@ -62,6 +62,9 @@ handles.tgl_startVideo.UserData.calcSCOS_beforeVideoStop_Flag = false;
 handles.fig_SCOS_GUI.UserData.recFolder = [ fileparts(fileparts(mfilename('fullpath'))) '\Records\timeData' ];
 if ~exist(handles.fig_SCOS_GUI.UserData.recFolder,'dir'); mkdir(handles.fig_SCOS_GUI.UserData.recFolder); end
 handles.fig_SCOS_GUI.UserData.recName = [ handles.fig_SCOS_GUI.UserData.recFolder '\Rec_' strrep(char(datetime()),':','_') '.mat']; 
+if ~exist(handles.fig_SCOS_GUI.UserData.recFolder,'file')
+    mkdir(handles.fig_SCOS_GUI.UserData.recFolder);
+end
 handles.tgl_startVideo.UserData.saveEachNframes = 200;
 
 
@@ -216,7 +219,7 @@ end
 function chk_externalTrigger_Callback(hObject, eventdata, handles)
     % -- set the external trigger field        
     if ~isvalid(handles.btn_startVideo.UserData.src)
-        vid_was_valid = isvalid(handles.btn_startVideo.UserData.vid);
+        vid_was_valid = isfield(handles.btn_startVideo.UserData,'vid') && isvalid(handles.btn_startVideo.UserData.vid);
         if ~vid_was_valid
             vid = videoinput("gentl", 1, "Mono8");
         else

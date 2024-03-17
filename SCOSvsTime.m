@@ -31,7 +31,13 @@ timePeriodForP2P = 2; % [s]
 %% Check input parameters
 if nargin == 0 % GUI mode
     plotFlag = 1;
-    [recordName] = uigetdir();
+    if exist('.\lastRec.mat','file')
+        lastF = load('.\lastRec.mat');        
+    else
+        lastF.recordName = '';
+    end
+
+    [recordName] = uigetdir(fileparts(lastF.recordName));
     if recordName == 0; return; end % if 'Cancel' was pressed
     if numel(dir([recordName, '\*.avi' ])) > 1 
         [recordRawName, recordDir] = uigetfile([recordName '\*.avi']);
@@ -45,6 +51,7 @@ if nargin == 0 % GUI mode
         d = dir([recordName, '\*.avi' ]);
         recordName = fullfile( recordName , d(1).name );
     end
+    save('.\lastRec.mat','recordName')
     
     maxWindowSize = 50; minWindowSize = 3;
     answer = inputdlg('Window Size','',[1 25],{'9'});

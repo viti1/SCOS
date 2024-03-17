@@ -25,13 +25,18 @@ function [ timeVec, rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpe
 if nargin <3
     plotFlag = true;
 end
+
+addpath('.\baseFunc\')
 %% Constants
 timePeriodForP2P = 2; % [s]
 
 %% Check input parameters
 if nargin == 0 % GUI mode
     plotFlag = 1;
-    [recordName] = uigetdir();
+    if exist('.\lastRec.mat','file')
+        lastF = load('.\lastRec.mat');        
+    end
+    [recordName] = uigetdir(fileparts(lastF.recordName));
     if recordName == 0; return; end % if 'Cancel' was pressed
     if numel(dir([recordName, '\*.avi' ])) > 1 
         [recordRawName, recordDir] = uigetfile([recordName '\*.avi']);
@@ -45,6 +50,8 @@ if nargin == 0 % GUI mode
         d = dir([recordName, '\*.avi' ]);
         recordName = fullfile( recordName , d(1).name );
     end
+    save('.\lastRec.mat','recordName')
+
     
     maxWindowSize = 50; minWindowSize = 3;
     answer = inputdlg('Window Size','',[1 25],{'9'});
@@ -135,7 +142,7 @@ readoutN   = interp1(dData.gainArr,dData.totNoise, info.name.Gain ,'spline');
 cut_mask        = mask(roi(1,:)  , roi(2,:));
 [rawSpeckleVar , rawSpeckleContrast , corrSpeckleVar , corrSpeckleContrast , imMeanVec] = InitNaN([nOfFrames 1]);
 
-actualGain = ConvertGain(info.cam.Gain,8,10.5e3);
+actualGain = ConvertGain(info.name.Gain,8,10.5e3);
 
 for i=1:nOfFrames
     im = head_rec(:,:,i);

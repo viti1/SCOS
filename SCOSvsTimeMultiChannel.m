@@ -32,7 +32,13 @@ timePeriodForP2P = 2; % [s]
 if nargin == 0 % GUI mode
     plotFlag = 1;
     resetMask = 0;
-    [recordName] = uigetdir();
+    if exist('.\lastRec.mat','file')
+        lastF = load('.\lastRec.mat');        
+    else
+        lastF.recordName = '';
+    end
+    [recordName] = uigetdir(fileparts(lastF.recordName));
+
     if recordName == 0; return; end % if 'Cancel' was pressed
     if numel(dir([recordName, '\*.avi' ])) > 1 
         [recordRawName, recordDir] = uigetfile([recordName '\*.avi']);
@@ -54,7 +60,7 @@ if nargin == 0 % GUI mode
         errordlg(['Window Size must be a number between ' num2str(minWindowSize)  ' and ' num2str( num2str(maxWindowSize) ) ]);
         error(['Window Size must be a number between ' num2str(minWindowSize)  ' and ' num2str( num2str(maxWindowSize) ) ])
     end
-    
+    save('.\lastRec.mat','recordName')
     clear answer
 end
 
@@ -108,7 +114,15 @@ if ~exist(maskFile,'file') || resetMask
 
     save(maskFile,'channels','masks','totMask');
 else
-    load(maskFile);
+    M = load(maskFile);
+    if isfield(M,'mask')
+        masks{1} = M.mask;
+        totMask = M.mask;
+        channels.Centers = M.circ.Center;
+        channels.Radii  = M.circ.Radius;
+    else
+        load(maskFile);
+    end
 end
 
 %% Read Record
@@ -129,7 +143,10 @@ nOfFrames = GetNumOfFrames(recordName);
 nOfChannels = numel(masks);
 
 [ rawSpeckleContrast , corrSpeckleContrast , meanVec ] = InitNaN([nOfFrames 1],nOfChannels);
+tic
 for i=1:nOfFrames
+%     fprintf('%d ',i);
+    if mod(i,50)==0; fprintf('%d\t',i); end
     im = ReadRecord(recordName,1,i);
     stdIm = stdfilt(im,true(windowSize));
     meanIm = imfilter(im, true(windowSize)/windowSize^2,'conv','same'); % TBD!!! add Xiaojun algorithm
@@ -141,7 +158,8 @@ for i=1:nOfFrames
         meanVec{k}(i) = mean(im(masks{k}));
     end
 end
-
+fprintf('\n');
+toc
 % TBD!! add SNR graph for each channel for corrected and not - corrected
 %% Create Time vector
 if ~isfield(info.name,'FR') || isnan(info.name.FR)
