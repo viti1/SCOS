@@ -1,15 +1,17 @@
 %% Set Parameters - Must run this section before any other section in the file
 windowSize = 9; % for spatial local noise calculation
-noiseFolder = [fileparts(fileparts(mfilename('fullpath'))) '\Records\NoiseAndBackground'];
-if ~exist(noiseFolder,'dir'); error('Wrong noise folder!'); end
-detectorName = 'Basler_1440GS_Vika01';
-videoFormat = 'Mono8'; 
+rootFolder = fileparts(fileparts(mfilename('fullpath')));
+if isempty(rootFolder); rootFolder = '.\'; end
+noiseFolder = [rootFolder '\Records\NoiseAndBackground'];
+if ~exist(noiseFolder,'dir'); mkdir(noiseFolder) ; end
+detectorName = 'Basler_1440GS_Tomoya_24828238';
+videoFormat = 'Mono12'; 
 
 analysisFolder = [noiseFolder filesep detectorName filesep videoFormat];
 if ~exist(analysisFolder,'dir'); mkdir(analysisFolder); end
 set(groot,'defaultAxesFontSize',12)
 mFolder = fileparts(mfilename('fullpath'));
-addpath([fileparts(mfilename('fullpath')) '\baseFunc']);
+addpath(['.\baseFunc']);
 bitDepth = sscanf(videoFormat,'%*[a-zA-Z]%d');
 
 recordFlag = 0; % if off it will try to load the data from the predefined filename
@@ -17,21 +19,23 @@ rewriteFlag = 0; % if recordFlag == 0, and recordings already exist, rewrite it.
 
 setupParams = struct();
 setupParams.CameraModel = 'Basler_acA1440-220um';
-setupParams.CameraSN = '40335401';
+setupParams.CameraSN = '24828238';
 setupParams.addToFilename = false;
 
-rerecord_RN = 0;
+% Flags
+rerecord_RN = 1; % rerecord read noise if it's already been recorded - closed camera
 recalc_RN = 1;
-rerecord_DCN = 0;
+rerecord_DCN = 1; % rerecord darc current noise if it's already been recorded - closed camera
 recalc_DCN = 1;
-rerecord_SN1 = 0;
-recalc_SN1 = 1;
+rerecord_SN1 = 0; % rerecord darc current noise if it's already been recorded - white paper/illumination device
+recalc_SN1 = 0;
 % Note : each section has two/three parts : Record , Calc and Plot
 %% 0. How many frames to Average?
 % ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
 %% Num Of Frames - Record and Calc
 % use recording with uniform signal approximately at the middle of the dynamic range, with more than 300 frames
-numOfFramesFolder = [ noiseFolder filesep 'NumOfFrames'];
+numOfFramesFolder = [ noiseFolder filesep 'NumOfFrames\nOfFrames'];
+if ~exist(numOfFramesFolder,'file'); mkdir(numOfFramesFolder); end
 matFileNumOfFrames = [ numOfFramesFolder filesep 'data.mat' ];
 if recordFlag || ~exist(numOfFramesFolder,'dir') || ~exist(matFileNumOfFrames,'file')
     max_nOfFrames = 200;
@@ -82,20 +86,30 @@ subplot(2,1,2);
 plot(nFrames.meanImPerFrame); xlabel('frame number'); ylabel('mean(I) [DU')
 grid on
 
-savefig(fig,[analysisFolder '\numOfFrames.fig'])
+savefig(fig,[analysisFolder '\numOfFrames.fig']);
+
 %% 1. Read Noise (minimum exposure time, with Cover)
 %% Read Noise vs BlackLevel - Record
 readNoiseBLFolder = [ analysisFolder filesep 'ReadNoise\vsBlackLevel'];
 
 if rerecord_RN
     setupParams.Cover = 'On';
-
-    BL.gainArr = [0:15:30,36];
-    BL.blackLevelArr = [0:6,10:10:30];
+    
+    if bitDepth == 8
+        BL.gainArr = [0:15:30,36];
+        BL.blackLevelArr = [0:6,10:10:30];
+    else
+        BL.blackLevelArr = [0:5:35 40:10:60 100 200 300];
+        BL.gainArr = [0 15 20 24];
+    end
     prefix = 'Cover';
     suffix = '';
     nOfFrames = 90;
-    recFormat = '.avi';
+    if bitDepth == 8
+        recFormat = '.avi';
+    else
+        recFormat = '.tiff';
+    end
     camParams = struct();
     camParams.AcquisitionFrameRate = 20; 
     camParams.ExposureTime = 21; % the minimum possible
@@ -122,11 +136,10 @@ if rerecord_RN
     delete(vid);
     clear gain bl camParams
 end
-
 %% Read Noise vs BlackLevel - Calc
 readNoiseVsBL_matfile = [readNoiseBLFolder filesep 'readNoiseVsBL.mat'];
-if ~exist(readNoisevsBL_matfile,'file') || recalc_RN 
-    [ records , BL.gainArr ] = ChooseRecords( readNoiseBLFolder  ,['Cover*Gain*' recFormat] , 'Gain' );
+if ~exist(readNoiseVsBL_matfile,'file') || recalc_RN 
+    [ records , BL.gainArr ] = ChooseRecords( readNoiseBLFolder  ,['Cover*Gain*'] , 'Gain' );
     BL.gainArr = unique(BL.gainArr);
     [ BL.records, BL.blackLevelArr ] = SortRecords(records,'BL');
     BL.blackLevelArr = unique(BL.blackLevelArr);
@@ -135,7 +148,7 @@ if ~exist(readNoisevsBL_matfile,'file') || recalc_RN
     [ BL.locSpatNoise ,BL.globSpatNoise, BL.tempNoise , BL.meanI]  = InitNaN( [numel(BL.gainArr) numel(BL.blackLevelArr)] );
     for gain_i = 1:numel(BL.gainArr)
         for bl_i = 1:numel(BL.blackLevelArr)
-            filter = sprintf('Cover*BL%gDU*Gain%gdB*%s',BL.blackLevelArr(bl_i),BL.gainArr(gain_i),recFormat);
+            filter = sprintf('Cover*BL%gDU*Gain%gdB*',BL.blackLevelArr(bl_i),BL.gainArr(gain_i));
             recName = ChooseRecords( readNoiseBLFolder  ,filter);
             if numel(recName) < 1
                 error('%s record was not found in %s',filter,readNoiseBLFolder);
@@ -150,8 +163,8 @@ if ~exist(readNoisevsBL_matfile,'file') || recalc_RN
     save(readNoiseVsBL_matfile,'-struct','BL')
 else
     BL = load(readNoiseVsBL_matfile);
-end
-    
+end   
+disp('Finish calculating read noise vs black level');
 %% Read Noise vs BlackLevel - Plot
 blFig = figure('name','black level influence on read noise','Units','Normalized','Position',[0.1 0.1 0.9 0.6]);
 subplot(1,2,1);
@@ -174,7 +187,7 @@ for i=1:2
     subplot(1,2,i);
     ylabel('Noise [DU]');
     xlabel('Black Level [DU]')
-    set(gca,'YLim', [-0.1 1.3]);
+    set(gca,'YLim', [-0.1  max([BL.locSpatNoise(:) ; BL.tempNoise(:)]) + 0.1 ]);
     grid on
 end
 
@@ -182,12 +195,16 @@ savefig(blFig, [analysisFolder '\ReadNoise vs BlackLevel.fig'])
 
 %% Read Noise vs Gain - Record
 readNoiseVsGainFolder = [ analysisFolder filesep 'ReadNoise\vsGain'];
-RN.gainArr = [ 0:5:25 27 30 33 36];
+if bitDepth==8
+    RN.gainArr = [ 0:5:25 27 30 33 36];
+else
+    RN.gainArr = [ 0:5:20 24]; % mono12 has only gain up to 24
+end
 RN.blackLevel = 30;
 prefix = 'Cover';
 suffix = '';
 nOfFrames = 90;
-recFormat = '.avi';
+recFormat = '.tiff';
 camParams = struct();
 camParams.AcquisitionFrameRate = 100; % the minimum possible
 camParams.ExposureTime = 21; % the minimum possible
@@ -205,14 +222,13 @@ if numel(dir(readNoiseVsGainFolder)) > 2 % in case of empty folder the result of
 end
 % record 
 vid = videoinput("gentl", 1, videoFormat);% vid =[];
-for gain = [14 16]%RN.gainArr
-%     if gain < 25; continue; end 
+for gain = RN.gainArr
     camParams.Gain = gain;
     RecordFromCamera(nOfFrames, camParams, setupParams , readNoiseVsGainFolder  , recFormat, prefix, suffix, 1 , 0 , vid);
 end
 delete(vid);
 clear gain bl camParams
-
+disp('Finished Recording Read Noise vs Gain');
 %% Read Noise vs Gain - Calc
     
 readNoiseVsGain_matfile = [readNoiseVsGainFolder filesep 'readNoiseVsGain.mat'];
@@ -231,7 +247,7 @@ if ~exist(readNoiseVsGain_matfile,'file') || recalc_RN
     disp('Calculating Read Noise vs Gain...')
     [ RN.locSpatNoise ,RN.globSpatNoise, RN.tempNoise , RN.meanI]  = InitNaN( [numel(RN.gainArr) numel(RN.blackLevel)] );
     for gain_i = 1:numel(RN.gainArr)
-        disp(records{i})
+         disp(records{gain_i})
         [RN.locSpatNoise(gain_i), RN.globSpatNoise(gain_i), RN.tempNoise(gain_i), RN.meanI(gain_i)] = CalcNoise(records{gain_i},windowSize,[],0);
     end
 
@@ -241,16 +257,17 @@ if ~exist(readNoiseVsGain_matfile,'file') || recalc_RN
 else
     RN = load(readNoiseVsGain_matfile);
 end
+disp('Finished Read Noise vs Gain Calculation');
 %% Read Noise vs Gain - Plot
 % 1. left plot Read Noise in DU, right plot Read Noise in [e]
 rnFig = figure('name', 'ReadNoise vs Gain' ,'Units','Normalized','Position',[0.3 0.2 0.63 0.4]);
 
 subplot(1,2,1)
-plot(RN.gainArr,RN.tempNoise,'*-'); hold on
-plot(RN.gainArr,RN.locSpatNoise,'*-');
-plot(RN.gainArr,RN.totNoise ,'*-');
+plot(10.^(RN.gainArr/20) ,RN.tempNoise,'*-'); hold on
+plot(10.^(RN.gainArr/20) ,RN.locSpatNoise,'*-');
+plot(10.^(RN.gainArr/20) ,RN.totNoise ,'*-');
 ylabel('Noise [DU]');
-xlabel('Gain [dB]')
+xlabel('Gain [rel]')
 title([' Read Noise [DU] vs Gain , BlackLevel=' , num2str(RN.blackLevel)])
 legend({'temporal', 'local spatial', 'total'},'location','northwest');
 grid on;
@@ -263,11 +280,11 @@ nBits = 8;
 RN.actualGainArr = reshape( ConvertGain(RN.gainArr,nBits,wellCapacity), [numel(RN.gainArr) 1] );
 
 subplot(1,2,2);
-plot(RN.gainArr,RN.tempNoise./RN.actualGainArr,'*-'); hold on
-plot(RN.gainArr,RN.locSpatNoise./RN.actualGainArr,'*-');
-plot(RN.gainArr,RN.totNoise./RN.actualGainArr ,'*-');
+plot(10.^(RN.gainArr/20),RN.tempNoise./RN.actualGainArr,'*-'); hold on
+plot(10.^(RN.gainArr/20),RN.locSpatNoise./RN.actualGainArr,'*-');
+plot(10.^(RN.gainArr/20),RN.totNoise./RN.actualGainArr ,'*-');
 ylabel('Noise [e]');
-xlabel('Gain [dB]');
+xlabel('Gain [rel]');
 grid on ;
 grid  minor 
 title([' Read Noise [e] vs Gain , BlackLevel=' , num2str(RN.blackLevel)])
@@ -283,9 +300,15 @@ if rerecord_DCN
     setupParams.Cover = 'On'; %#ok<UNRCH>
     if ~exist(darkCurrentFolder,'dir'); mkdir(darkCurrentFolder); end
     prefix = 'Cover'; suffix ='';
-    recFormat = '.avi';
     DCN.expTArr = [0.021 , 0.2 , 2 , 10 , 30 , 50 , 75, 100 , 125 , 150 , 200 ]*1e3;
-    DCN.gainArr = [0:5:30,36];
+    if bitDepth==8
+        DCN.gainArr =  [0:5:30,36];
+        recFormat = '.avi';
+    else
+        DCN.gainArr = [ 0:5:20 24]; % mono12 has only gain up to 24
+        recFormat = '.tiff';
+    end
+
     overwriteFlag = true;
     plotFlag = false;
     camParams = struct();
@@ -304,6 +327,7 @@ if rerecord_DCN
     delete(vid);
     clear gain expT camParams
 end
+disp('Finished Recording Dark Current')
 
 %% Dark Current -  Calc
 darkCurrent_matfile = [darkCurrentFolder filesep 'darkCurrentNoiseVsGainVsExpt.mat'];
@@ -324,9 +348,9 @@ if exist(darkCurrent_matfile,'file') || recalc_DCN
         end
         for expt_i = 1:numel(records)
             disp(records{expt_i})
-            tic
+%             tic
             rec  = ReadRecord(records{expt_i},nOfFrames);
-            toc
+%             toc
             [DCN.locSpatNoise(gain_i,expt_i), DCN.globSpatNoise(gain_i,expt_i), DCN.tempNoise(gain_i,expt_i), DCN.meanI(gain_i,expt_i) ] = ...
                 CalcNoise(rec,windowSize,[],0);
         end
