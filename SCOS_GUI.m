@@ -218,7 +218,7 @@ end
 % --- Executes on button press in chk_externalTrigger.
 function chk_externalTrigger_Callback(hObject, eventdata, handles)
     % -- set the external trigger field        
-    if ~isvalid(handles.btn_startVideo.UserData.src)
+    if ~isfield(handles.btn_startVideo.UserData, 'src') || ~isvalid(handles.btn_startVideo.UserData.src)
         vid_was_valid = isfield(handles.btn_startVideo.UserData,'vid') && isvalid(handles.btn_startVideo.UserData.vid);
         if ~vid_was_valid
             vid = videoinput("gentl", 1, "Mono8");
@@ -423,22 +423,26 @@ end
 save(last_folder_matfile,'recFolder');
 
 set(handles.btn_startVideo,'Enable','Off');
-
 % stop running video and delete all opened vid
 wasVideoRunning = handles.btn_startVideo.Value;
 
 if wasVideoRunning
     % stop video
+    isfield(handles.btn_startVideo.UserData,'vid')
+
     btn_startVideo_Callback(handles.btn_startVideo, eventdata, handles)
+    isfield(handles.btn_startVideo.UserData,'vid')
+
     pause(0.05);
+    isfield(handles.btn_startVideo.UserData,'vid')
     kk=0;
-    while ( isvalid(handles.btn_startVideo.UserData.src) || isvalid(handles.btn_startVideo.UserData.vid) ) && kk<20
+    while ( isvalid(handles.btn_startVideo.UserData.src) || ( isfield(handles.btn_startVideo.UserData,'vid') && isvalid(handles.btn_startVideo.UserData.vid) ) ) && kk<20
         pause(0.02);
         disp('pausing 0.02 sec')
         kk=kk+1;
     end
     
-    if isvalid(handles.btn_startVideo.UserData.src) || isvalid(handles.btn_startVideo.UserData.vid)
+    if isvalid(handles.btn_startVideo.UserData.src) || ( isfield(handles.btn_startVideo.UserData,'vid') && isvalid(handles.btn_startVideo.UserData.vid) )
         warning('for some reason video was not stopped')
         delete(handles.btn_startVideo.UserData.vid);
         objects = imaqfind;
@@ -473,11 +477,14 @@ end
 
 windowSize = str2double(handles.edt_windowSize.String); 
 
-[~,recName]= RecordFromCamera(nOfFrames, camParams, [], recFolder ,'.tiff','',['FR' num2str(frameRate) 'Hz'],0,0); 
+% beepintervalSeconds = 120;
+% beebIntervalFrames  = beepintervalSeconds*frameRate;
+
+[~,recName]= RecordFromCamera(nOfFrames, camParams, [], recFolder ,'.tiff','',['FR' num2str(frameRate) 'Hz'],0,0,[]); 
 if isfield(handles.fig_SCOS_GUI.UserData,'ROI')
-    SCOSvsTimeUpdated( recName ,windowSize, 1, handles.fig_SCOS_GUI.UserData.ROI);
+    SCOSvsTimeMultiChannel(recName ,windowSize, 1, handles.fig_SCOS_GUI.UserData.ROI);
 else
-    SCOSvsTimeUpdated( recName ,windowSize, 1  );
+    SCOSvsTimeMultiChannel(recName ,windowSize, 1);
 end
 
 set(handles.btn_startVideo,'Enable','On');
@@ -667,7 +674,6 @@ if strcmp(get(hObject,'String'),'Stop Video')
         vid = hObject.UserData.vid;
         stop(vid)
         delete(vid);
-        clear(vid)
     else
         vidobj = imaqfind;
         if numel(vidobj)>0;  stop(vidobj(1)); delete(vidobj(1)); end
@@ -676,8 +682,8 @@ if strcmp(get(hObject,'String'),'Stop Video')
     % set(hObject,'String','Start Video') - > this will happen after video is stopped in other instance of the same function
 else %  get(hObject,'String') == 'Start Video'    
     try
-        if isfield(handles.fig_SCOS_GUI.UserData,'vid') && ~isvalid(handles.fig_SCOS_GUI.UserData.vid)
-            delete(handles.fig_SCOS_GUI.UserData.vid);
+        if isfield(hObject.UserData,'vid') && ~isvalid(hObject.UserData.vid)
+            delete(hObject.UserData.vid);
         end
 
         vidobj = imaqfind;
@@ -685,7 +691,7 @@ else %  get(hObject,'String') == 'Start Video'
 
         vid = videoinput("gentl", 1, "Mono8");
         vid.FramesPerTrigger = Inf; 
-        handles.fig_SCOS_GUI.UserData.vid = vid;
+        hObject.UserData.vid = vid;
     catch err
         if isequal(err.identifier,'imaq:videoinput:noDevices')
             errordlg('Connect camera then try again');
@@ -711,10 +717,13 @@ else %  get(hObject,'String') == 'Start Video'
     handles.edt_gain.String = src.Gain;
     handles.edt_triggerDelay.String = src.TriggerDelay;
     handles.edt_frameRate.String = src.AcquisitionFrameRate;
-    handles.chk_externalTrigger.Value = strcmp(src.TriggerMode,'on');    
-
-    detectorFolder = [fileparts(fileparts(mfilename('fullpath'))) '\Records\NoiseAndBackground\Basler_1440GS_Vika01\Mono8'];
-    dData = load([detectorFolder '\ReadNoise\vsGain\readNoiseVsGain.mat']);  % detector Data
+    handles.chk_externalTrigger.Value = strcmpi(src.TriggerMode,'on');    
+    if handles.chk_externalTrigger.Value
+        chk_externalTrigger_Callback(handles.chk_externalTrigger, eventdata, handles);
+    end
+    
+    detectorName = 'Basler_1440GS_Vika01';
+    dData = load(['.\camerasData\' detectorName '\readNoiseVsGain.mat']);  % detector Data
    
     k = 1;    
     if ~isrunning(vid); start(vid); end
@@ -879,7 +888,7 @@ else %  get(hObject,'String') == 'Start Video'
         stop(vid)
         delete(vid);
     end
-
+    isfield(handles.btn_startVideo.UserData,'vid')
     fprintf('\n')
     if isvalid(hObject); set(hObject,'String','Start Video'); end
 end
@@ -888,11 +897,12 @@ end
 function fig_SCOS_GUI_CloseRequestFcn(hObject, eventdata, handles)
 
 if isfield(handles.btn_startVideo.UserData,'vid') && isvalid(handles.btn_startVideo.UserData.vid) && isrunning(handles.btn_startVideo.UserData.vid)    
-    stop(hObject.UserData.vid);
+    stop(handles.btn_startVideo.UserData.vid);
 end
 pause(0.065); % let it stop from the btn_startVideo_Callback
 if isfield(handles.btn_startVideo.UserData,'vid') && isvalid(handles.btn_startVideo.UserData.vid)
     delete(handles.btn_startVideo.UserData.vid);
+    isfield(handles.btn_startVideo.UserData,'vid')
 end
 
 %% Delete vid if there is one opened
@@ -911,226 +921,230 @@ delete(hObject); %closes the figure
 
 
 % --- Executes on button press in tgl_startVideo.
-function tgl_startVideo_Callback(hObject, eventdata, handles)
-% hObject    handle to tgl_startVideo (see GCBO)
-% eventdata  reserved - to be defined in a future version of MATLAB
-% handles    structure with handles and user data (see GUIDATA)
-
-% Hint: get(hObject,'Value') returns toggle state of tgl_startVideo
-
-if hObject.Value == 0
-    % stop calculating and plotting scos
-    handles.btn_startVideo.UserData.calcSCOS_beforeVideoStop_Flag = handles.btn_startVideo.UserData.calcSCOS_Flag;
-    if handles.btn_startVideo.UserData.calcSCOS_Flag  
-        btn_start_Callback(handles.btn_start, eventdata, handles)
-    end
-    
-    % Stop Video
-%     handles.fig_SCOS_GUI.UserData.isVideoRunning = false; % -> will stop the loop in previous instarnce of this function    
-
-    % delete vid
-    if isfield(hObject.UserData,'vid') && isvalid(hObject.UserData.vid)
-        vid = hObject.UserData.vid;
-        stop(vid)
-        delete(vid);
-%         clear(vid)
-    else
-        vidobj = imaqfind;
-        if numel(vidobj)>0;  stop(vidobj(1)); delete(vidobj(1)); end
-    end
-    
-    % set(hObject,'String','Start Video') - > this will happen after video is stopped in other instance of the same function
-else %  get(hObject,'String') == 'Start Video'    
-    try
-        if isfield(hObject.UserData,'vid') && ~isvalid(hObject.UserData.vid)
-            delete(hObject.UserData.vid);
-        end
-
-        vidobj = imaqfind;
-        if ~isempty(vidobj); delete(vidobj(1)); end
-
-        vid = videoinput("gentl", 1, "Mono8");
-        vid.FramesPerTrigger = Inf; 
-        hObject.UserData.vid = vid;
-    catch err
-        if isequal(err.identifier,'imaq:videoinput:noDevices')
-            errordlg('Connect camera then try again');
-            return
-        else
-            errordlg({'Error While Starting videoinput ',err.message});
-            return;
-        end
-    end
-    set(hObject,'String','Stop Video');
-%     handles.fig_SCOS_GUI.UserData.isVideoRunning = true;
-    
-    src = getselectedsource(vid);    
-    hObject.UserData.src = src;
-
-    if strcmpi(src.TriggerMode,'On') %handles.chk_externalTrigger.Value
-        triggerconfig(vid, 'hardware');
-        % set(src,'TriggerMode','on');
-    end
-
-    % init camera params
-    handles.edt_exposureTime.String = src.ExposureTime * 1e-3;
-    handles.edt_gain.String = src.Gain;
-    handles.edt_triggerDelay.String = src.TriggerDelay;
-    handles.edt_frameRate.String = src.AcquisitionFrameRate;
-    handles.chk_externalTrigger.Value = strcmp(src.TriggerMode,'on');    
-
-    detectorFolder = [fileparts(fileparts(mfilename('fullpath'))) '\Records\NoiseAndBackground\Basler_1440GS_Vika01\Mono8'];
-    dData = load([detectorFolder '\ReadNoise\vsGain\readNoiseVsGain.mat']);  % detector Data
-   
-    k = 1;    
-    if ~isrunning(vid); start(vid); end
-
-    pauseTriggerMode = 0.05;
-    pauseUsualMode = 0.01;
-
-    if strcmpi(src.TriggerMode,'On')
-        pauseInterval = pauseTriggerMode;
-    else
-        pauseInterval = pauseUsualMode;
-    end
-    pause(pauseInterval);
-    
-    scos_ind = find(isnan(hObject.UserData.scosTime),1);
-    if isempty(scos_ind)
-        scos_ind = numel(hObject.UserData.scosTime) + 1;        
-    end
-    currXlim = get(handles.ax_scos,'XLim');
-    
-    if hObject.UserData.calcSCOS_beforeVideoStop_Flag
-        btn_start_Callback(handles.btn_start, eventdata, handles)
-    end
-    while isvalid(handles.fig_SCOS_GUI) && hObject.Value && isvalid(hObject.UserData.src) && isvalid(vid) && vid.FramesAvailable  % VIKA TBD! 
-        % ~handles.fig_SCOS_GUI.UserData.stopVideoFlag
-
-        % --- Get one frame ------------------------
-        currImagesBuff = getdata(vid, vid.FramesAvailable);
-        %size(currImagesBuff,3)
-        im = squeeze( currImagesBuff(:,:,end,end) );
-
-        % --- Show in Axis -------------------------
-        if k==1
-            hImage = imagesc(handles.ax_image,im);
-            [N,edges] = histcounts(im(:),1000,'Normalization','cdf');
-            upperLim = ceil(edges(find(N > 0.99,1)));
-            lowerLim = floor(edges(find(N > 0.01,1)));
-            minStretch = 10;
-            if upperLim-lowerLim < minStretch
-                lowerLim  = mean([upperLim,lowerLim]) - minStretch/2 ;
-                upperLim = upperLim + minStretch;
-            end
-            set(handles.ax_image,'CLim',[ lowerLim upperLim]);
-            SetAxisEqual(handles.ax_image);
-            colorbar;
-            colormap gray;
-
-            if isfield(handles.fig_SCOS_GUI.UserData,'ROI')
-                circ = handles.fig_SCOS_GUI.UserData.ROI.circ;
-                viscircles(handles.ax_image, circ.Center , circ.Radius,'Color','r','EnhanceVisibility',false,'LineWidth',1);
-            end
-        else
-            set(hImage, 'CData', im);
-        end
-        k = k + 1;
-
-        if isfield(handles.fig_SCOS_GUI.UserData,'ROI')
-            mask = handles.fig_SCOS_GUI.UserData.ROI.mask;
-        else
-            mask = true(size(im)); %CreateCircleMask(size(im));
-        end
-        meanI = round(mean(im(mask)));
-        pcntl = prctile(im(mask),[5 95]);
-        set(handles.txt_avgI,'String',[ '<I>=' num2str(meanI) 'DU;   5%I  =' num2str(pcntl(1)) 'DU;   95%I =' num2str(pcntl(2)) 'DU  '   ]);        
-
-        % --- Calc Scos ---------------------------
-        if hObject.UserData.calcSCOS_Flag
-           if hObject.UserData.resetSCOS_Flag
-               hObject.UserData.scosData = nan(1,10000);
-               hObject.UserData.scosTime = nan(1,10000);
-               hObject.UserData.resetSCOS_Flag = false;               
-               scos_ind=1;
-%                timeJump = 0.5 ; %  min
-               currXlim = [0 0.5]; 
-           end
-           if scos_ind > length(hObject.UserData.scosData)
-               hObject.UserData.scosData = [ hObject.scosData nan(1,10000)] ;
-               hObject.UserData.scosTime = [ hObject.scosTime nan(1,10000)] ;
-           end
-
-           im = double(im);
-           windowSize = str2double(handles.edt_windowSize.String);
-           gain_dB = hObject.UserData.src.Gain;
-           readoutN   = interp1(dData.gainArr,dData.totNoise, gain_dB ,'spline');
-           actualGain = ConvertGain(gain_dB,8,10.5e3);      
-
-           stdIm = stdfilt(im,true(windowSize));
-           meanIm = imfilter(im, true(windowSize)/windowSize^2,'conv','same');
-           meanImSquare = meanIm.^2;
-           Kraw = (stdIm.^2)./meanImSquare ;
-           
-%            if mod(scos_ind,500) == 0
-%                disp(['Shot Noise^2 = ', num2str(actualGain*mean(meanIm(mask))) ])               
-%                disp(['Noise^2 = ' num2str(readoutN^2) ])               
-%                disp(['Var_raw = ' num2str(mean((stdIm(mask).^2))) ]);               
+ function tgl_startVideo_Callback(hObject, eventdata, handles)
+% % hObject    handle to tgl_startVideo (see GCBO)
+% % eventdata  reserved - to be defined in a future version of MATLAB
+% % handles    structure with handles and user data (see GUIDATA)
+% 
+% % Hint: get(hObject,'Value') returns toggle state of tgl_startVideo
+% 
+% if hObject.Value == 0
+%     % stop calculating and plotting scos
+%     handles.btn_startVideo.UserData.calcSCOS_beforeVideoStop_Flag = handles.btn_startVideo.UserData.calcSCOS_Flag;
+%     if handles.btn_startVideo.UserData.calcSCOS_Flag  
+%         btn_start_Callback(handles.btn_start, eventdata, handles)
+%     end
+%     
+%     % Stop Video
+% %     handles.fig_SCOS_GUI.UserData.isVideoRunning = false; % -> will stop the loop in previous instarnce of this function    
+% 
+%     % delete vid
+%     if isfield(hObject.UserData,'vid') && isvalid(hObject.UserData.vid)
+%         vid = hObject.UserData.vid;
+%         stop(vid)
+%         delete(vid);
+% %         clear(vid)
+%     else
+%         vidobj = imaqfind;
+%         if numel(vidobj)>0;  stop(vidobj(1)); delete(vidobj(1)); end
+%     end
+%     
+%     % set(hObject,'String','Start Video') - > this will happen after video is stopped in other instance of the same function
+% else %  get(hObject,'String') == 'Start Video'    
+%     try
+%         if isfield(hObject.UserData,'vid') && ~isvalid(hObject.UserData.vid)
+%             delete(hObject.UserData.vid);
+%         end
+% 
+%         vidobj = imaqfind;
+%         if ~isempty(vidobj); delete(vidobj(1)); end
+% 
+%         vid = videoinput("gentl", 1, "Mono8");
+%         vid.FramesPerTrigger = Inf; 
+%         hObject.UserData.vid = vid;
+%     catch err
+%         if isequal(err.identifier,'imaq:videoinput:noDevices')
+%             errordlg('Connect camera then try again');
+%             return
+%         else
+%             errordlg({'Error While Starting videoinput ',err.message});
+%             return;
+%         end
+%     end
+%     set(hObject,'String','Stop Video');
+% %     handles.fig_SCOS_GUI.UserData.isVideoRunning = true;
+%     
+%     src = getselectedsource(vid);    
+%     hObject.UserData.src = src;
+% 
+%     if strcmpi(src.TriggerMode,'On') %handles.chk_externalTrigger.Value
+%         triggerconfig(vid, 'hardware');
+%         % set(src,'TriggerMode','on');
+%     end
+% 
+%     % init camera params
+%     handles.edt_exposureTime.String = src.ExposureTime * 1e-3;
+%     handles.edt_gain.String = src.Gain;
+%     handles.edt_triggerDelay.String = src.TriggerDelay;
+%     handles.edt_frameRate.String = src.AcquisitionFrameRate;
+%     handles.chk_externalTrigger.Value = strcmpi(src.TriggerMode,'on');    
+% 
+%     if handles.chk_externalTrigger.Value
+%         chk_externalTrigger_Callback(handles.chk_externalTrigger, eventdata, handles);
+%     end
+%     
+%     detectorFolder = [fileparts(fileparts(mfilename('fullpath'))) '\Records\NoiseAndBackground\Basler_1440GS_Vika01\Mono8'];
+%     dData = load([detectorFolder '\ReadNoise\vsGain\readNoiseVsGain.mat']);  % detector Data
+%    
+%     k = 1;    
+%     if ~isrunning(vid); start(vid); end
+% 
+%     pauseTriggerMode = 0.05;
+%     pauseUsualMode = 0.01;
+% 
+%     if strcmpi(src.TriggerMode,'On')
+%         pauseInterval = pauseTriggerMode;
+%     else
+%         pauseInterval = pauseUsualMode;
+%     end
+%     pause(pauseInterval);
+%     
+%     scos_ind = find(isnan(hObject.UserData.scosTime),1);
+%     if isempty(scos_ind)
+%         scos_ind = numel(hObject.UserData.scosTime) + 1;        
+%     end
+%     currXlim = get(handles.ax_scos,'XLim');
+%     
+%     if hObject.UserData.calcSCOS_beforeVideoStop_Flag
+%         btn_start_Callback(handles.btn_start, eventdata, handles)
+%     end
+%     while isvalid(handles.fig_SCOS_GUI) && hObject.Value && isvalid(hObject.UserData.src) && isvalid(vid) && vid.FramesAvailable  % VIKA TBD! 
+%         % ~handles.fig_SCOS_GUI.UserData.stopVideoFlag
+% 
+%         % --- Get one frame ------------------------
+%         currImagesBuff = getdata(vid, vid.FramesAvailable);
+%         %size(currImagesBuff,3)
+%         im = squeeze( currImagesBuff(:,:,end,end) );
+% 
+%         % --- Show in Axis -------------------------
+%         if k==1
+%             hImage = imagesc(handles.ax_image,im);
+%             [N,edges] = histcounts(im(:),1000,'Normalization','cdf');
+%             upperLim = ceil(edges(find(N > 0.99,1)));
+%             lowerLim = floor(edges(find(N > 0.01,1)));
+%             minStretch = 10;
+%             if upperLim-lowerLim < minStretch
+%                 lowerLim  = mean([upperLim,lowerLim]) - minStretch/2 ;
+%                 upperLim = upperLim + minStretch;
+%             end
+%             set(handles.ax_image,'CLim',[ lowerLim upperLim]);
+%             SetAxisEqual(handles.ax_image);
+%             colorbar;
+%             colormap gray;
+% 
+%             if isfield(handles.fig_SCOS_GUI.UserData,'ROI')
+%                 circ = handles.fig_SCOS_GUI.UserData.ROI.circ;
+%                 viscircles(handles.ax_image, circ.Center , circ.Radius,'Color','r','EnhanceVisibility',false,'LineWidth',1);
+%             end
+%         else
+%             set(hImage, 'CData', im);
+%         end
+%         k = k + 1;
+% 
+%         if isfield(handles.fig_SCOS_GUI.UserData,'ROI')
+%             mask = handles.fig_SCOS_GUI.UserData.ROI.mask;
+%         else
+%             mask = true(size(im)); %CreateCircleMask(size(im));
+%         end
+%         meanI = round(mean(im(mask)));
+%         pcntl = prctile(im(mask),[5 95]);
+%         set(handles.txt_avgI,'String',[ '<I>=' num2str(meanI) 'DU;   5%I  =' num2str(pcntl(1)) 'DU;   95%I =' num2str(pcntl(2)) 'DU  '   ]);        
+% 
+%         % --- Calc Scos ---------------------------
+%         if hObject.UserData.calcSCOS_Flag
+%            if hObject.UserData.resetSCOS_Flag
+%                hObject.UserData.scosData = nan(1,10000);
+%                hObject.UserData.scosTime = nan(1,10000);
+%                hObject.UserData.resetSCOS_Flag = false;               
+%                scos_ind=1;
+% %                timeJump = 0.5 ; %  min
+%                currXlim = [0 0.5]; 
 %            end
-           if mod(scos_ind, hObject.UserData.saveEachNframes ) == 0 
-               disp(['Saving backup in : ' handles.fig_SCOS_GUI.UserData.recName]);
-               scosData = hObject.UserData.scosData;
-               scosTime = hObject.UserData.scosTime;
-               save(handles.fig_SCOS_GUI.UserData.recName,'scosData','scosTime');
-           end
-
-           hObject.UserData.scosData(scos_ind) = mean(Kraw(mask) - actualGain./meanIm(mask) - ( readoutN^2 + 1/12)./meanImSquare(mask) );   % Kappa_corrected 
-           %hObject.UserData.scosData(scos_ind) =  mean( (stdIm(mask)- actualGain*meanIm(mask) - readoutN -1/12)./meanIm(mask) )^2  ;
-           tm = toc(hObject.UserData.resetSCOS_clock) ;
-
-           hObject.UserData.scosTime(scos_ind) =  tm/60 + hObject.UserData.calcSCOS_lastClock  ; % /60 in order to convert to [min] from [sec]
-
-           plot(handles.ax_scos,hObject.UserData.scosTime(1:scos_ind),1./hObject.UserData.scosData(1:scos_ind),'-');
-           % set x and y axis labels
-           ylabel(handles.ax_scos,'1/\kappa^2');
-           xlabel(handles.ax_scos,'time [min]');
-           set(handles.ax_scos,'XLim',currXlim  )
-           
-           % change XLim if it's not enough            
-%            curr_xlim = get(handles.ax_scos,'XLim');
-           if currXlim(2) <= hObject.UserData.scosTime(scos_ind)
-                currXlim(2) = 2*currXlim(2);
-%                 timeJump = 2*curr_xlim(2);
-%                 set(handles.ax_scos,'XLim',[0 timeJump*( mod(hObject.UserData.scosTime(scos_ind),timeJump) + 1) ]); 
-%                 set(handles.ax_scos,'XLim',[curr_xlim(1) (2*curr_xlim(2)) ] )
-           end
-
-           scos_ind = scos_ind + 1;
-        end       
-
-         %start(vid);
-         pause(pauseInterval);
-
-         % if still there is not frames -> while loop untill there are frames available
-         temp_counter = 0;
-         while  isvalid(handles.fig_SCOS_GUI) &&  hObject.Value && isvalid(vid) && temp_counter < Inf 
-             if  ~isrunning(vid) || vid.FramesAvailable 
-                 break;
-             else
-                 pause(pauseInterval/2); 
-                 temp_counter = temp_counter + 1;
-             end
-         end
-    %     trigger(vid);
-    end
-
-    if isvalid(hObject);  hObject.Value=0; end
-    if isvalid(vid) 
-        stop(vid)
-        delete(vid);
-    end
-
-    fprintf('\n')
-    if isvalid(hObject); set(hObject,'String','Start Video'); end
-end
-             
+%            if scos_ind > length(hObject.UserData.scosData)
+%                hObject.UserData.scosData = [ hObject.scosData nan(1,10000)] ;
+%                hObject.UserData.scosTime = [ hObject.scosTime nan(1,10000)] ;
+%            end
+% 
+%            im = double(im);
+%            windowSize = str2double(handles.edt_windowSize.String);
+%            gain_dB = hObject.UserData.src.Gain;
+%            readoutN   = interp1(dData.gainArr,dData.totNoise, gain_dB ,'spline');
+%            actualGain = ConvertGain(gain_dB,8,10.5e3);      
+% 
+%            stdIm = stdfilt(im,true(windowSize));
+%            meanIm = imfilter(im, true(windowSize)/windowSize^2,'conv','same');
+%            meanImSquare = meanIm.^2;
+%            Kraw = (stdIm.^2)./meanImSquare ;
+%            
+% %            if mod(scos_ind,500) == 0
+% %                disp(['Shot Noise^2 = ', num2str(actualGain*mean(meanIm(mask))) ])               
+% %                disp(['Noise^2 = ' num2str(readoutN^2) ])               
+% %                disp(['Var_raw = ' num2str(mean((stdIm(mask).^2))) ]);               
+% %            end
+%            if mod(scos_ind, hObject.UserData.saveEachNframes ) == 0 
+%                disp(['Saving backup in : ' handles.fig_SCOS_GUI.UserData.recName]);
+%                scosData = hObject.UserData.scosData;
+%                scosTime = hObject.UserData.scosTime;
+%                save(handles.fig_SCOS_GUI.UserData.recName,'scosData','scosTime');
+%            end
+% 
+%            hObject.UserData.scosData(scos_ind) = mean(Kraw(mask) - actualGain./meanIm(mask) - ( readoutN^2 + 1/12)./meanImSquare(mask) );   % Kappa_corrected 
+%            %hObject.UserData.scosData(scos_ind) =  mean( (stdIm(mask)- actualGain*meanIm(mask) - readoutN -1/12)./meanIm(mask) )^2  ;
+%            tm = toc(hObject.UserData.resetSCOS_clock) ;
+% 
+%            hObject.UserData.scosTime(scos_ind) =  tm/60 + hObject.UserData.calcSCOS_lastClock  ; % /60 in order to convert to [min] from [sec]
+% 
+%            plot(handles.ax_scos,hObject.UserData.scosTime(1:scos_ind),1./hObject.UserData.scosData(1:scos_ind),'-');
+%            % set x and y axis labels
+%            ylabel(handles.ax_scos,'1/\kappa^2');
+%            xlabel(handles.ax_scos,'time [min]');
+%            set(handles.ax_scos,'XLim',currXlim  )
+%            
+%            % change XLim if it's not enough            
+% %            curr_xlim = get(handles.ax_scos,'XLim');
+%            if currXlim(2) <= hObject.UserData.scosTime(scos_ind)
+%                 currXlim(2) = 2*currXlim(2);
+% %                 timeJump = 2*curr_xlim(2);
+% %                 set(handles.ax_scos,'XLim',[0 timeJump*( mod(hObject.UserData.scosTime(scos_ind),timeJump) + 1) ]); 
+% %                 set(handles.ax_scos,'XLim',[curr_xlim(1) (2*curr_xlim(2)) ] )
+%            end
+% 
+%            scos_ind = scos_ind + 1;
+%         end       
+% 
+%          %start(vid);
+%          pause(pauseInterval);
+% 
+%          % if still there is not frames -> while loop untill there are frames available
+%          temp_counter = 0;
+%          while  isvalid(handles.fig_SCOS_GUI) &&  hObject.Value && isvalid(vid) && temp_counter < Inf 
+%              if  ~isrunning(vid) || vid.FramesAvailable 
+%                  break;
+%              else
+%                  pause(pauseInterval/2); 
+%                  temp_counter = temp_counter + 1;
+%              end
+%          end
+%     %     trigger(vid);
+%     end
+% 
+%     if isvalid(hObject);  hObject.Value=0; end
+%     if isvalid(vid) 
+%         stop(vid)
+%         delete(vid);
+%     end
+% 
+%     fprintf('\n')
+%     if isvalid(hObject); set(hObject,'String','Start Video'); end
+% end
+%              

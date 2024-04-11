@@ -21,7 +21,9 @@
 %  ---------------------------------------------------------------------------------------------------------
 
 function [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , info] = ...
-    SCOSvsTimeMultichannel(recordName,windowSize,plotFlag,resetMask)
+    SCOSvsTimeMultiChannel(recordName,windowSize,plotFlag,resetMask)
+
+addpath('.\baseFunc');
 if nargin <3
     plotFlag = true;
 end
@@ -53,20 +55,25 @@ if nargin == 0 % GUI mode
         recordName = fullfile( recordName , d(1).name );
     end
     
-    maxWindowSize = 50; minWindowSize = 3;
-    answer = inputdlg('Window Size','',[1 25],{'9'});
-    windowSize = str2double(answer{1});
-    if isnan(windowSize) || windowSize > maxWindowSize || windowSize < minWindowSize
-        errordlg(['Window Size must be a number between ' num2str(minWindowSize)  ' and ' num2str( num2str(maxWindowSize) ) ]);
-        error(['Window Size must be a number between ' num2str(minWindowSize)  ' and ' num2str( num2str(maxWindowSize) ) ])
-    end
+%     maxWindowSize = 50; minWindowSize = 3;
+%     answer = inputdlg('Window Size','',[1 25],{'9'});
+%     windowSize = str2double(answer{1});
+%     if isnan(windowSize) || windowSize > maxWindowSize || windowSize < minWindowSize
+%         errordlg(['Window Size must be a number between ' num2str(minWindowSize)  ' and ' num2str( num2str(maxWindowSize) ) ]);
+%         error(['Window Size must be a number between ' num2str(minWindowSize)  ' and ' num2str( num2str(maxWindowSize) ) ])
+%     end
+    windowSize = 9;
     save('.\lastRec.mat','recordName')
     clear answer
 end
 
+if ~exist('resetMask','var') || isempty(resetMask)
+    resetMask = false;
+end
 %% Create Mask
 upFolders = strsplit(recordName,filesep);
 rawName = strrep( strjoin(upFolders(end-2:end),'; '), '_',' ');
+shortRecName = strjoin(upFolders(end-2:end));
 
 if exist(recordName,'file') == 7 % it's a folder
     recSavePrefix = [ recordName filesep ];
@@ -76,42 +83,14 @@ end
 maskFile = [recSavePrefix 'Mask.mat'];
 
 % delete(maskFile)
-if ~exist(maskFile,'file') || resetMask
-    im = mean(ReadRecord(recordName, min(30,GetNumOfFrames(recordName))),3);
-    expectedRadius = 125;
-    [ masks, totMask, channels , figIm , h_circles] = autoFindRIOMultichannel(im,expectedRadius);
-    set(figIm,'Position',[100,50,1200,800])
-    if numel(masks)<7
-        answer = questdlg('Draw more channels?', '','Yes','No','Discard Existing','Yes');
-        drawOneMore = strcmp(answer,'Yes') || strcmp(answer,'Discard Existing') ;
-        [x,y] = meshgrid(1:size(im,2),1:size(im,1));
+if  isstruct(resetMask) 
+    masks{1} = resetMask.mask;
+    totMask = resetMask.mask;
+    channels.Centers = resetMask.circ.Center;
+    channels.Radii   = resetMask.circ.Radius;
+elseif  ~exist(maskFile,'file') || isequal(resetMask,1) || isequal(resetMask,true)
 
-        if strcmp(answer,'Discard Existing')
-            masks = {};
-            totMask = false(size(totMask));
-            channels.Centers = [];
-            channels.Radii = [];
-            delete(h_circles);
-        end
-                    
-        k = numel(masks)+1; 
-        while drawOneMore
-            circ = drawcircle('Color','r','FaceAlpha',0.2);
-            channels.Centers(k,:) = circ.Center;
-            channels.Radii(k) = circ.Radius;
-
-            masks{k} = false(size(im,1),size(im,2));
-            masks{k}((x-circ.Center(1)).^2 + (y-circ.Center(2)).^2 < circ.Radius^2 ) = true; 
-            totMask = masks{k} | totMask ;
-            answer = questdlg('One more channel?', '','Yes','No','Yes');
-            drawOneMore = strcmp(answer,'Yes');
-            k=k+1;
-        end
-
-        if exist('imfig','var'); close(imfig); end  
-    end
-
-
+    savefig(figIm,[recordName '\ImWithChannels.fig']);
     save(maskFile,'channels','masks','totMask');
 else
     M = load(maskFile);
@@ -129,13 +108,35 @@ end
 disp(['Reading Record "' recordName '" ... '])
 info = GetRecordInfo(recordName);
 
+if ~isfield(info.name,'FR') || isnan(info.name.FR)
+    error('Frame Rate must be part of the recording name as "FR"');
+end
+
+if ~isfield(info,'cameraSN') || isempty(info.cameraSN)
+    if ~isequal(info.fileType,'.tiff')
+        error('for this function file type should be .tiff');
+    end
+    error('Camera serial number was not found from the file name');
+end
+nOfBits = info.nBits;
+
 %% Set params
-% detectorFolder = [fileparts(fileparts(mfilename('fullpath'))) '\Records\NoiseAndBackground\Basler_1440GS_Vika01\Mono8'];
-% dData = load([detectorFolder '\ReadNoise\vsGain\readNoiseVsGain.mat']);  % detector Data
-% nOfBits = 8;
-% maxCapacity = 10.5e3;% [e]
-% actualGain = ConvertGain(info.name.Gain,nOfBits,maxCapacity);
-% readoutN   = interp1(dData.gainArr,dData.totNoise, info.name.Gain ,'spline');
+% find read noise for current gain
+nOfBits = info.nBits;
+camDataFolder = [fileparts(mfilename('fullpath')) '\camerasData'];
+camDataFile = dir([ camDataFolder '\SN' num2str(info.cameraSN) '*readNoiseVsGain_Mono' num2str(nOfBits) '.mat']);
+if numel(camDataFile) == 0
+    error('Camera Data file was not found');
+elseif numel(camDataFile) > 1
+    disp(camDataFile.name)
+    error('more that one camera file was found');
+end
+
+dData = load([camDataFolder filesep camDataFile]); 
+maxCapacity = 10.5e3;% [e]
+actualGain = ConvertGain(info.name.Gain,nOfBits,maxCapacity);
+readoutN   = interp1(ConvertGain(dData.gainArr,nOfBits,maxCapacity),dData.tempNoise, actualGain ,'spline');
+
 
 %%  Calc Specle Contrast
 disp(['Calculation SCOS on "' recordName '" ... '])
@@ -143,67 +144,205 @@ nOfFrames = GetNumOfFrames(recordName);
 nOfChannels = numel(masks);
 
 [ rawSpeckleContrast , corrSpeckleContrast , meanVec ] = InitNaN([nOfFrames 1],nOfChannels);
-tic
+bt=tic;
+at=tic;
 for i=1:nOfFrames
 %     fprintf('%d ',i);
-    if mod(i,50)==0; fprintf('%d\t',i); end
+    if mod(i,50)==0; fprintf('%d\t\t',i); disp(toc(at)); at=tic; end
     im = ReadRecord(recordName,1,i);
     stdIm = stdfilt(im,true(windowSize));
     meanIm = imfilter(im, true(windowSize)/windowSize^2,'conv','same'); % TBD!!! add Xiaojun algorithm
     meanImSquare = meanIm.^2;
     Kraw = (stdIm.^2)./meanImSquare ;
-    for k = 1:nOfChannels
-        rawSpeckleContrast{k}(i) = mean(Kraw(masks{k}));
-        % corrSpeckleContrast{k}(i) = mean(Kraw(masks{k}) - actualGain./meanIm(masks{k}) - ( readoutN^2 + 1/12)./meanImSquare(masks{k}) );
-        meanVec{k}(i) = mean(im(masks{k}));
+    for Ch = 1:nOfChannels
+        rawSpeckleContrast{Ch}(i) = mean(Kraw(masks{Ch}));
+        corrSpeckleContrast{Ch}(i) = mean(Kraw(masks{Ch}) - actualGain./meanIm(masks{Ch}) - (1/12 + readoutN^2)./meanImSquare(masks{Ch}) ); % readoutN^2
+        meanVec{Ch}(i) = mean(im(masks{Ch}));
     end
 end
 fprintf('\n');
-toc
-% TBD!! add SNR graph for each channel for corrected and not - corrected
+toc(bt)
 %% Create Time vector
-if ~isfield(info.name,'FR') || isnan(info.name.FR)
-    error('Frame Rate must be part of the recording name as "FR"');
-end
+
 frameRate = info.name.FR; 
 
 timeVec = (0:(nOfFrames-1))'*(1/frameRate) ;   % FR = FrameRate
 p2p_time = timeVec<timePeriodForP2P;
-
-%% Plot
 stdStr = sprintf('Std%dx%d',windowSize,windowSize);
 
 % infoFields = fieldnames(info.name);
 % titleStr =  [ infoFields{1} '; exp=' num2str(info.name.expT)  'ms; Gain='  num2str(info.name.Gain) 'dB' ];
 
-    
+%% Save Data
+save([recSavePrefix 'Local' stdStr '.mat'],'timeVec', 'shortRecName','corrSpeckleContrast' , 'rawSpeckleContrast','meanVec', 'info', 'recordName','windowSize');
+
+%% Plot
+Nx = 3;   
 if plotFlag
-    fig1 = figure('name',['SCOS ' recordName],'Position',[10 80 2025 970]);
-    for k = 1:nOfChannels
-        subplot(nOfChannels,3,3*k-2);
-            plot(timeVec,meanVec{k});
-            title(sprintf('Channel %d - mean I (<I>=%.0fDU)',k,mean(meanVec{k})));
-        subplot(nOfChannels,3,3*k-1);
-            plot(timeVec,rawSpeckleContrast{k})
+    fig1 = figure('name',['SCOS ' shortRecName],'Units','Normalized','Position',[0.01,1-0.16-nOfChannels*0.15,0.9,0.05+nOfChannels*0.15]);
+    for Ch = 1:nOfChannels
+        
+        try
+            [raw_SNR,  raw_FFT , raw_freq, raw_pulseFreq, raw_pulseBPM] = CalcSNR_Pulse(rawSpeckleContrast{Ch},frameRate,false);
+        catch err
+            warning(err.message);
+        end
+        subplot(nOfChannels,Nx,Nx*(Ch-1)+1);
+            plot(timeVec,meanVec{Ch});
+            title(sprintf('Channel %d - mean I (<I>=%.0fDU)',Ch,mean(meanVec{Ch})));
+            xlim([0 timeVec(end)]);
+            xlabel('Time [s]')
+        subplot(nOfChannels,Nx,Nx*(Ch-1)+2);
+            plot(timeVec,rawSpeckleContrast{Ch})
             ylabel('Kraw^2')
-            title(sprintf('Channel %d - Raw (<I>=%.0fDU)',k,mean(meanVec{k})));
-        % subplot(nOfChannels,3,3*k);
-        %     plot(timeVec,corrSpeckleContrast{k})
+            title(sprintf('Channel %d - Raw (<I>=%.0fDU)',Ch,mean(meanVec{Ch})));
+            xlim([0 timeVec(end)]);
+            xlabel('Time [s]')
+        subplot(nOfChannels,Nx,Nx*(Ch-1)+3);
+            plot(raw_freq,raw_FFT)
+            ylabel(' FFT ')
+            title(sprintf('FFT: SNR=%.2g Pulse=%.0fbpm',raw_SNR,raw_pulseBPM));
+            xlim([0 raw_freq(end)]);
+            xlabel('Frequency [Hz]')
+    end
+    savefig(fig1,[recSavePrefix 'Local' stdStr '_plot.fig']);
+
+    fig1_corrected = figure('name',['SCOS ' shortRecName],'Units','Normalized','Position',[0.01,1-0.16-nOfChannels*0.15,0.9,0.05+nOfChannels*0.15]);
+    for Ch = 1:nOfChannels        
+        try
+            [corr_SNR,  corr_FFT , corr_freq, corr_pulseFreq, corr_pulseBPM] = CalcSNR_Pulse(corrSpeckleContrast{Ch},frameRate,false);
+        catch err
+            warning(err.message);
+        end
+        subplot(nOfChannels,Nx,Nx*(Ch-1)+1);
+            plot(timeVec,meanVec{Ch});
+            title(sprintf('Channel %d - mean I (<I>=%.0fDU)',Ch,mean(meanVec{Ch})));
+            xlim([0 timeVec(end)]);
+            xlabel('Time [s]')
+        subplot(nOfChannels,Nx,Nx*(Ch-1)+2);
+            plot(timeVec,corrSpeckleContrast{Ch})
+            ylabel('Kraw^2')
+            title(sprintf('Channel %d - Corr (<I>=%.0fDU)',Ch,mean(meanVec{Ch})));
+            xlim([0 timeVec(end)]);
+            xlabel('Time [s]')
+        subplot(nOfChannels,Nx,Nx*(Ch-1)+3);
+            plot(corr_freq,corr_FFT)
+            ylabel(' FFT ')
+            title(sprintf('FFT: SNR=%.2g Pulse=%.0fbpm',corr_SNR,corr_pulseBPM));
+            xlim([0 corr_freq(end)]);
+            xlabel('Frequency [Hz]')
+    end
+    savefig(fig1,[recSavePrefix 'Local' stdStr '_plot.fig']);
+    savefig(fig1_corrected,[recSavePrefix 'Local' stdStr '_plot_corrected.fig']);
+
+            %     plot(timeVec,corrSpeckleContrast{k})
         %     ylabel('Kf^2')
         %     title(sprintf('Channel %d - Corrected partly ',k));
+end
+
+% for plot_i=1:nOfChannels*Nx
+%     subplot(nOfChannels,Nx,plot_i);    
+% end
+%% Correct Jumps
+nOfChannels = numel(corrSpeckleContrast);
+for channel_i =1:nOfChannels
+    
+%     jump_th = 0.065; %std(rawSpeckleContrast{channel_i}(1:min(20,end))) * 5;
+    diff_rawSpeckleContrast =  diff(rawSpeckleContrast{channel_i});
+    jump_th = median(abs(diff_rawSpeckleContrast)) * 10;
+    jump_up_idx = find(diff(rawSpeckleContrast{channel_i}) > jump_th);
+    jump_down_idx = find(diff(rawSpeckleContrast{channel_i}) < -jump_th);
+    if ~isempty(jump_up_idx) && ~isempty(jump_down_idx)
+        jumps_up   = diff_rawSpeckleContrast(jump_up_idx);
+        jumps_down = diff_rawSpeckleContrast(jump_down_idx);
+
+        rawSpeckleContrast_jumpsCorrected{channel_i} = rawSpeckleContrast{channel_i};
+        corrSpeckleContrast_jumpsCorrected{channel_i} = rawSpeckleContrast{channel_i};
+        if jump_up_idx(1) > jump_down_idx(1)
+            if numel(jump_up_idx) < numel(jump_down_idx)
+                jump_up_idx( end + 1 ) = numel(rawSpeckleContrast{channel_i}); %#ok<AGROW>
+                jump_down_idx(numel(jump_up_idx)+1:end) = [];
+            end
+            for n=1:numel(jump_down_idx)
+                rawSpeckleContrast_jumpsCorrected{channel_i}(jump_down_idx(n)+1:jump_up_idx(n)) = rawSpeckleContrast{channel_i}(jump_down_idx(n)+1:jump_up_idx(n) ) - jumps_down(n);
+                corrSpeckleContrast_jumpsCorrected{channel_i}(jump_down_idx(n)+1:jump_up_idx(n)) = corrSpeckleContrast{channel_i}(jump_down_idx(n)+1:jump_up_idx(n) ) - jumps_down(n);                
+            end
+        else
+            if numel(jump_down_idx) < numel(jump_up_idx)
+                jump_down_idx( end + 1 ) = numel(rawSpeckleContrast{channel_i}); %#ok<AGROW>
+                jump_up_idx(numel(jump_down_idx)+1:end) = [];
+            end
+            for n=1:numel(jump_up_idx)
+                rawSpeckleContrast_jumpsCorrected{channel_i}(jump_up_idx(n)+1:jump_down_idx(n))  = rawSpeckleContrast{channel_i}(jump_up_idx(n)+1:jump_down_idx(n) ) - jumps_up(n);
+                corrSpeckleContrast_jumpsCorrected{channel_i}(jump_up_idx(n)+1:jump_down_idx(n)) = corrSpeckleContrast{channel_i}(jump_up_idx(n)+1:jump_down_idx(n) ) - jumps_up(n);
+            end    
+        end
     end
 end
 
-for plot_i=1:nOfChannels*3
-    subplot(nOfChannels,3,plot_i);
-    xlim([0 timeVec(end)]);
-    xlabel('Time [s]')
+if exist('rawSpeckleContrast_jumpsCorrected','var') 
+    if ~exist('recSavePrefix','var')
+        if exist(recordName,'file') == 7 % it's a folder
+            recSavePrefix = [ recordName filesep ];
+        else % it's a file
+            recSavePrefix = [ recordName(1:find(recordName=='.',1,'last')-1) '_' ];
+        end
+    end
+    stdStr = sprintf('Std%dx%d',windowSize,windowSize);
+%     save([recSavePrefix 'Local' stdStr '.mat'],'timeVec', 'frameRate','corrSpeckleContrast' , 'rawSpeckleContrast','meanVec', 'info', 'recordName','windowSize','rawSpeckleContrast_jumpsCorrected','corrSpeckleContrast_jumpsCorrected');    
+
+    for channel_i = 1:nOfChannels
+        [raw_SNR2,  raw_FFT2 , raw_freq2, raw_pulseFreq2, raw_pulseBPM2] = CalcSNR_Pulse(rawSpeckleContrast_jumpsCorrected{channel_i},frameRate,false);
+        [corr_SNR2,  corr_FFT2 , corr_freq2, corr_pulseFreq2, corr_pulseBPM2] = CalcSNR_Pulse(corrSpeckleContrast_jumpsCorrected{channel_i},frameRate,false);
+
+        fig_jump_corrected = figure('Units','Normalized','Position',[0.01 0.4 0.95 0.3]);
+        Nx=3; Ny=2;
+        
+        subplot(Ny,Nx,1);
+        plot(timeVec,rawSpeckleContrast{channel_i})
+        ylabel('Kraw^2')
+        title(sprintf('Channel %d - Raw (<I>=%.0fDU) ',channel_i,mean(meanVec{channel_i})));
+        xlim([0 timeVec(end)]);
+        xlabel('Time [s]');
+
+        subplot(Ny,Nx,2);
+        plot(timeVec,rawSpeckleContrast_jumpsCorrected{channel_i})
+        ylabel('Kraw^2')
+        title(sprintf('Channel %d - Raw (<I>=%.0fDU) - Jumps corrected',channel_i,mean(meanVec{channel_i})));
+        xlim([0 timeVec(end)]);
+        xlabel('Time [s]');
+
+        subplot(Ny,Nx,3);
+        plot(raw_freq2,raw_FFT2)
+        ylabel(' FFT')
+        title(sprintf('FFT - jumps corrected: SNR=%.2g Pulse=%.0fbpm',raw_SNR2,raw_pulseBPM2));
+        xlim([0 raw_freq2(end)]);
+        xlabel('Frequency [Hz]')
+
+        subplot(Ny,Nx,4);
+        plot(timeVec,corrSpeckleContrast{channel_i})
+        ylabel('Kraw^2')
+        title(sprintf('Channel %d - Corr (<I>=%.0fDU) ',channel_i,mean(meanVec{channel_i})));
+        xlim([0 timeVec(end)]);
+        xlabel('Time [s]');
+        
+        subplot(Ny,Nx,5);
+        plot(timeVec,corrSpeckleContrast_jumpsCorrected{channel_i})
+        ylabel('Kraw^2')
+        title(sprintf('Channel %d - Corr (<I>=%.0fDU) - Jumps corrected',channel_i,mean(meanVec{channel_i})));
+        xlim([0 timeVec(end)]);
+        xlabel('Time [s]');
+
+        subplot(Ny,Nx,6);
+        plot(corr_freq2,corr_FFT2)
+        ylabel(' FFT')
+        title(sprintf('FFT Corr - jumps corrected: SNR=%.2g Pulse=%.0fbpm',corr_SNR2,raw_pulseBPM2));
+        xlim([0 corr_freq2(end)]);
+        xlabel('Frequency [Hz]')
+
+        savefig(fig_jump_corrected,[recSavePrefix 'Local' stdStr '_plot_jumps_corrected.fig']);
+    end      
+end
 end
 
-%TBD add SNR DATA!
-%% Save
-if exist('fig','var')
-    savefig(fig1,[recSavePrefix 'Local' stdStr '_plot.fig']);
-    save([recSavePrefix 'Local' stdStr '.mat'],'timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast','meanVec', 'info', 'recordName','windowSize');
-end
  

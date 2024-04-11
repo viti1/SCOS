@@ -135,7 +135,8 @@ nOfFrames = size(head_rec,3);
 
 %% Load rellevant parameters from camera characterizaion file 
 detectorFolder = [fileparts(fileparts(mfilename('fullpath'))) '\Records\NoiseAndBackground\Basler_1440GS_Vika01\Mono8'];
-dData = load([detectorFolder '\ReadNoise\vsGain\readNoiseVsGain.mat']);  % detector Data
+detectorName = 'Basler_1440GS_Vika01';
+dData = load(['.\camerasData\' detectorName '\readNoiseVsGain.mat']);  % detector Data
 readoutN   = interp1(dData.gainArr,dData.totNoise, info.name.Gain ,'spline');
 
 
