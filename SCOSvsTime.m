@@ -22,9 +22,11 @@
 
 function [ timeVec, rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, imMeanVec , info] = ...
     SCOSvsTime(recordName,windowSize,plotFlag,maskInput)
+
 if nargin <3
     plotFlag = true;
 end
+
 %% Constants
 timePeriodForP2P = 2; % [s]
 
