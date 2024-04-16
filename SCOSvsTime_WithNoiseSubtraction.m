@@ -21,7 +21,7 @@
 %  ---------------------------------------------------------------------------------------------------------
 
 function [ timeVec, rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, imMeanVec , info] = ...
-    SCOSvsTime_withNoiseReduction(recordName,backgroundName,windowSize,plotFlag,maskInput)
+    SCOSvsTime_WithNoiseSubtraction(recordName,backgroundName,windowSize,plotFlag,maskInput)
 if nargin <3
     plotFlag = true;
 end
@@ -224,8 +224,8 @@ for i=1:nOfFrames
         fittedISquare = fittedI.^2;
 %         rawSpeckleContrast(i) = mean((stdIm_raw(masks{ch}) ./ meanIm(masks{ch}))).^2;
         
-        rawSpeckleContrast{ch}(i) = mean((stdIm(masks{ch}) ./ fittedISquare(masks{ch})));
-        corrSpeckleContrast{ch}(i) = mean( -actualGain./fittedI(masks{ch}) + (stdIm(masks{ch}) - spVar(masks{ch}) - 1/12 + readoutN^2)./fittedISquare(masks{ch}) ); % - ( readoutN^2 )./fittedISquare(masks{ch}) );
+        rawSpeckleContrast{ch}(i) = mean((stdIm(masks{ch}).^2 ./ fittedISquare(masks{ch})));
+        corrSpeckleContrast{ch}(i) = mean( ( stdIm(masks{ch})^2 - actualGain.*fittedI(masks{ch})  - spVar(masks{ch}) - 1/12 - readoutN^2)./fittedISquare(masks{ch}) ); % - ( readoutN^2 )./fittedISquare(masks{ch}) );
         imMeanVec{ch}(i) = meanFrame;
     end 
 end
