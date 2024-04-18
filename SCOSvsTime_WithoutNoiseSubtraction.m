@@ -21,7 +21,7 @@
 %  ---------------------------------------------------------------------------------------------------------
 
 function [ timeVec, rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, imMeanVec , info] = ...
-    SCOSvsTime_WithoutNoiseSubtrastion(recordName,windowSize,plotFlag,maskInput)
+    SCOSvsTime_WithoutNoiseSubtraction(recordName,windowSize,plotFlag,maskInput)
 
 %% add path to baseFunc folder 
 addpath('.\baseFunc\')
