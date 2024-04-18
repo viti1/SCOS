@@ -38,7 +38,10 @@ if nargin == 0 % GUI mode
     plotFlag = 1;
     if exist('.\lastRec.mat','file')
         lastF = load('.\lastRec.mat');        
+    else
+        lastF.recordName = '';
     end
+    
     [recordName] = uigetdir(fileparts(lastF.recordName));
     if recordName == 0; return; end % if 'Cancel' was pressed
     if numel(dir([recordName, '\*.avi' ])) > 1 
