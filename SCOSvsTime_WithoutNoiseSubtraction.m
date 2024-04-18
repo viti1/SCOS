@@ -141,8 +141,8 @@ for i=1:nOfFrames
     stdIm = stdfilt(cut_im,true(windowSize));  
     meanIm = imfilter(cut_im, true(windowSize)/windowSize^2,'conv','same'); 
 
-    rawSpeckleVar(i)       = mean(stdIm(cut_mask))^2;
-    rawSpeckleContrast(i)  = mean(stdIm(cut_mask)./meanIm(cut_mask))^2;
+    rawSpeckleVar(i)       = mean(stdIm(cut_mask).^2);
+    rawSpeckleContrast(i)  = mean((stdIm(cut_mask)./meanIm(cut_mask)).^2);
     
     imMeanVec(i) = mean(cut_im(cut_mask)); % mean(meanIm);
 end
