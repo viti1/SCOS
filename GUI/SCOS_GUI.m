@@ -109,17 +109,17 @@ else
 
     set(hObject,'String','Start SCOS');
     
+    frameRate     = handles.edt_frameRate.Value;
+    fr = handles.tgl_startVideo.UserData.src.AcquisitionFrameRate
+    Gain          = handles.edt_gain.Value;
+    exposureTime  = handles.edt_exposureTime.Value;
+    triggerDelay  = handles.edt_triggerDelay.Value;
+               
     if ~isempty(handles.tgl_startVideo.UserData.scosTime) && any(~isnan(handles.tgl_startVideo.UserData.scosTime))
         scosData = handles.tgl_startVideo.UserData.scosData;
         scosTime = handles.tgl_startVideo.UserData.scosTime;
-        save(handles.fig_SCOS_GUI.UserData.recName,'scosData','scosTime');
-    end
-    
-    if ~isempty(handles.tgl_startVideo.UserData.scosTime) && any(~isnan(handles.tgl_startVideo.UserData.scosTime))
-        scosData = handles.tgl_startVideo.UserData.scosData;
-        scosTime = handles.tgl_startVideo.UserData.scosTime;
-        save(handles.fig_SCOS_GUI.UserData.recName,'scosData','scosTime');
-    end   
+        save(handles.fig_SCOS_GUI.UserData.recName,'scosData','scosTime','frameRate','exposureTime','Gain','triggerDelay');
+    end 
     
     % handles.tgl_startVideo.UserData.resetSCOS_clock = tic;
 end
@@ -166,15 +166,46 @@ function btn_open_recording_Callback(hObject, eventdata, handles)
             return;
         end
         D = load([filePath filesep fileName ]);
-    end
+    end    
+
+    firstNonNunIdx = find(isnan(D.scosTime),1);
+    D.scosData(firstNonNunIdx:end) = [];
+    D.scosTime(firstNonNunIdx:end) = [];
     
+    if isempty(D.scosData)
+        msgbox([ fileName  '  recording is empty']);
+        return;
+    end
     fig = figure('Name',[ 'Scos Result' fileName ]);
+    subplot(2,1,1)
     plot(D.scosTime,1./D.scosData);
     ylabel('1/\kappa^2');
     xlabel('time [min]');
-    title(['SCOS Results' fileName],'interpreter','none');
+    title(['SCOS Results: ' fileName(1:end-4)],'interpreter','none');
 
+    % validate frame rate:
+    if isempty(firstNonNunIdx);  firstNonNunIdx = Inf; end
+    timeDiff = median(diff(D.scosTime(1:min(100,firstNonNunIdx))))*60;
+    frameRateCalc = round(1/timeDiff,2)
+    if isnan(frameRateCalc); errordlg('Could not extract frame rate'); return; end
+        
+    subplot(2,1,2)
+    if isfield(D,'frameRate')
+        frameRate  = D.frameRate;
+        if abs( frameRateCalc / frameRate ) > 1.2 || abs( frameRateCalc / frameRate ) < 0.8
+            warning('frameRateCalc = %g  frameRateCamera = %g',frameRateCalc,frameRate); 
+        end
+    else        
+        frameRate = frameRateCalc;
+    end
+    [corr_SNR,  corr_FFT , corr_freq, corr_pulseFreq, corr_pulseBPM] = CalcSNR_Pulse(1./D.scosData,frameRate,0);
+    plot(corr_freq,corr_FFT)
+    ylabel(' FFT')
+    title(sprintf('FFT: SNR=%.2g, Pulse=%.0fbpm',corr_SNR,corr_pulseBPM));
+    xlim([0 corr_freq(end)]);
+    xlabel('Frequency [Hz]')
 
+    
 %% == Change CamParams Buttons
 function edt_exposureTime_Callback(hObject, eventdata, handles)
 expTNum = str2double(hObject.String);
@@ -534,9 +565,9 @@ windowSize = str2double(handles.edt_windowSize.String);
 
 [~,recName]= RecordFromCamera(nOfFrames, camParams, [], recFolder ,'.tiff','',['FR' num2str(frameRate) 'Hz'],0,0,[]); 
 if isfield(handles.fig_SCOS_GUI.UserData,'ROI')
-    SCOSvsTimeMultiChannel(recName ,windowSize, 1, handles.fig_SCOS_GUI.UserData.ROI);
+    SCOSvsTimeUpdated(recName ,windowSize, 1, handles.fig_SCOS_GUI.UserData.ROI);
 else
-    SCOSvsTimeMultiChannel(recName ,windowSize, 1);
+    SCOSvsTimeUpdated(recName ,windowSize, 1);
 end
 
 set(handles.tgl_startVideo,'Enable','On');
@@ -654,6 +685,7 @@ else %  get(hObject,'String') == 'Start Video'
     if hObject.UserData.calcSCOS_beforeVideoStop_Flag
         btn_start_scos_Callback(handles.btn_start_scos, eventdata, handles)
     end
+    numOfMissedFrames = 0;
     
     set(hObject,'String','Stop Video');
 
@@ -663,9 +695,13 @@ else %  get(hObject,'String') == 'Start Video'
 
         % --- Get one frame ------------------------
         currImagesBuff = getdata(vid, vid.FramesAvailable);
-        %size(currImagesBuff,3)
+        if hObject.UserData.calcSCOS_Flag
+            tm = toc(hObject.UserData.resetSCOS_clock) ;
+        end
+%         fprintf('%d \t',size(currImagesBuff,3)-1);
+        if mod(k,30)==0; fprintf('\n'); end
         im = squeeze( currImagesBuff(:,:,end,end) );
-
+        numOfMissedFrames = numOfMissedFrames + size(currImagesBuff,3)-1;
         % --- Show in Axis -------------------------
         if isfield(handles.fig_SCOS_GUI.UserData,'ROI')
             mask = handles.fig_SCOS_GUI.UserData.ROI.mask;
@@ -724,12 +760,15 @@ else %  get(hObject,'String') == 'Start Video'
                disp(['Saving backup in : ' handles.fig_SCOS_GUI.UserData.recName]);
                scosData = hObject.UserData.scosData;
                scosTime = hObject.UserData.scosTime;
-               save(handles.fig_SCOS_GUI.UserData.recName,'scosData','scosTime');
+               frameRate = handles.edt_frameRate.Value;
+               Gain  = handles.edt_gain.Value;
+               exposureTime  = handles.edt_exposureTime.Value;
+               triggerDelay  = handles.edt_triggerDelay.Value;
+               save(handles.fig_SCOS_GUI.UserData.recName,'scosData','scosTime','frameRate','exposureTime','Gain','triggerDelay');
            end
 
            hObject.UserData.scosData(scos_ind) = mean(Kraw(mask) - actualGain./meanIm(mask) - ( readoutN^2 + 1/12)./meanImSquare(mask) );   % Kappa_corrected 
            %hObject.UserData.scosData(scos_ind) =  mean( (stdIm(mask)- actualGain*meanIm(mask) - readoutN -1/12)./meanIm(mask) )^2  ;
-           tm = toc(hObject.UserData.resetSCOS_clock) ;
 
            hObject.UserData.scosTime(scos_ind) =  tm/60 + hObject.UserData.calcSCOS_lastClock  ; % /60 in order to convert to [min] from [sec]
 
@@ -773,7 +812,7 @@ else %  get(hObject,'String') == 'Start Video'
 %         delete(vid);
     end
 
-    fprintf('\n')
+    fprintf('Num of missed frames = %d\n',numOfMissedFrames)
     if isvalid(hObject); set(hObject,'String','Start Video'); end
 end
      
