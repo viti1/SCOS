@@ -347,7 +347,7 @@ if exist('rawSpeckleContrast_jumpsCorrected','var')
         subplot(Ny,Nx,6);
         plot(corr_freq2,corr_FFT2)
         ylabel(' FFT')
-        title(sprintf('FFT Corr - jumps corrected: SNR=%.2g Pulse=%.0fbpm',corr_SNR2,raw_pulseBPM2));
+        title(sprintf('FFT Corr - jumps corrected: SNR=%.2g Pulse=%.0fbpm',corr_SNR2,corr_pulseBPM2));
         xlim([0 corr_freq2(end)]);
         xlabel('Frequency [Hz]')
 
