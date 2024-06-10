@@ -22,7 +22,7 @@ function varargout = AnasthesiaTimePoints(varargin)
 
 % Edit the above text to modify the response to help AnasthesiaTimePoints
 
-% Last Modified by GUIDE v2.5 10-Jun-2024 02:20:10
+% Last Modified by GUIDE v2.5 10-Jun-2024 07:02:00
 
 % Begin initialization code - DO NOT EDIT
 gui_Singleton = 1;
@@ -102,7 +102,7 @@ handles.txt.UserData.startTime = tic;
 handles.txt.UserData.T0.datetime = datetime;
 handles.txt.UserData.T0.secFromStart = 0;
 hObject.Enable = 'off';
-handles.txt.String = [ handles.txt.String ; ['T0 - Start                       ', getTimeStr(handles.txt.UserData.T0.datetime)] ];
+handles.txt.String = [ handles.txt.String ; ['T0 - Start                                 ', getTimeStr(handles.txt.UserData.T0.datetime)] ];
 
 % --- Executes on button press in btn_T1.
 function btn_T1_Callback(hObject, eventdata, handles)
@@ -122,28 +122,73 @@ handles.txt.String = [ handles.txt.String ; ['pre T2 - Pneumoperitoneum         
 function btn_T3_Callback(hObject, eventdata, handles)
 handles.txt.UserData.T3.datetime = datetime;
 handles.txt.UserData.T3.secFromStart = toc(handles.txt.UserData.startTime);
-hObject.Enable = 'off';
+hObject.Enable = 'Off';
 handles.txt.String = [ handles.txt.String ; ['pre T3 - Head Positioning              ', getTimeStr(handles.txt.UserData.T3.datetime)] ];
+
+% --- Executes on button press in btn_other.
+function btn_other_Callback(hObject, eventdata, handles)
+if isempty(handles.edt_other.String)
+    errordlg('Must give a name to the event');
+    return;
+end
+hObject.Value = hObject.Value + 1;
+k = hObject.Value;
+handles.txt.UserData.Other(k).datetime = datetime;
+handles.txt.UserData.Other(k).secFromStart = toc(handles.txt.UserData.startTime);
+handles.txt.UserData.Other(k).name = handles.edt_other.String;
+handles.txt.String = [ handles.txt.String ; [handles.edt_other.String            '  ', getTimeStr(handles.txt.UserData.Other(k).datetime)] ];
+
+if isequal(handles.btn_T5.Enable,'off')    
+    SaveToFiles(handles)
+end
 
 % --- Executes on button press in btn_T5.
 function btn_T5_Callback(hObject, eventdata, handles)
 handles.txt.UserData.T5.datetime = datetime;
 handles.txt.UserData.T3.secFromStart = toc(handles.txt.UserData.startTime);
 hObject.Enable = 'off';
-handles.txt.String = [ handles.txt.String ; ['T5 - Surgery end, Neutral Position ', getTimeStr(handles.txt.UserData.T5.datetime)] ];
-D = handles.txt.UserData;
+handles.txt.String = [ handles.txt.String ; ['T5 - Surgery End, Neutral Position  ', getTimeStr(handles.txt.UserData.T5.datetime)] ];
+SaveToFiles(handles)
 
-
-save(handles.txt.UserData.fileName,'-struct', 'D');
-fid  = fopen([handles.txt.UserData.fileName(1:end-4) '.txt'],'w');
-fprintf(fid,'T0 - Start                  %s\r\n', getTimeStr(D.T0.datetime));
-fprintf(fid,'T1 - Anestethia Induction   %s\r\n', getTimeStr(D.T1.datetime));
-fprintf(fid,'pre T2 - Pneumoperitoneum   %s\r\n', getTimeStr(D.T2.datetime));
-fprintf(fid,'pre T3 - Head Positioning   %s\r\n', getTimeStr(D.T3.datetime));
-fprintf(fid,'T5 - Surgery end            %s\r\n', getTimeStr(D.T5.datetime));
-fclose(fid);
-winopen([handles.txt.UserData.fileName(1:end-4) '.txt']);
+function SaveToFiles(handles)
+    D = handles.txt.UserData;
+    save(handles.txt.UserData.fileName,'-struct', 'D');
+    fid  = fopen([handles.txt.UserData.fileName(1:end-4) '.txt'],'w');
+    maxLen = 0;
+    for k=1:numel(handles.txt.String)
+        tmp = strsplit(handles.txt.String{k}); % last is the time        
+        maxLen = max(length(strjoin(tmp(1:end-1))), maxLen);
+    end
+    
+    for k=1:numel(handles.txt.String)
+        tmp = strsplit(handles.txt.String{k});
+        fprintf(fid,'%s%s%s\r\n',strjoin(tmp(1:end-1)),blanks(maxLen + 3 - length(strjoin(tmp(1:end-1)))),tmp{end});
+    end
+    fclose(fid);
 
 function ret = getTimeStr(datetimeVar)
     dateTimeCell = strsplit(char(datetimeVar));
     ret = dateTimeCell{2};
+
+
+function edt_other_Callback(hObject, eventdata, handles)
+
+
+% --- Executes during object creation, after setting all properties.
+function edt_other_CreateFcn(hObject, eventdata, handles)
+% hObject    handle to edt_other (see GCBO)
+% eventdata  reserved - to be defined in a future version of MATLAB
+% handles    empty - handles not created until after all CreateFcns called
+
+% Hint: edit controls usually have a white background on Windows.
+%       See ISPC and COMPUTER.
+if ispc && isequal(get(hObject,'BackgroundColor'), get(0,'defaultUicontrolBackgroundColor'))
+    set(hObject,'BackgroundColor','white');
+end
+
+
+% --- Executes during object deletion, before destroying properties.
+function figure1_DeleteFcn(hObject, eventdata, handles)
+    if isequal(handles.btn_T5.Enable,'off')  && exist([handles.txt.UserData.fileName(1:end-4) '.txt'],'file') % the figure is closed at the end of the run
+        winopen([handles.txt.UserData.fileName(1:end-4) '.txt']);
+    end
