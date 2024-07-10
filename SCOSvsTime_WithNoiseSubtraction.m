@@ -1,5 +1,5 @@
 %  ---------------------------------------------------------------------------------------------------------
-%  [ timeVec,  , rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, imMeanVec , info] = PlotSCOSvsTime(recordName,windowSize,plotFlag,maskInput)
+%  [ timeVec,  , rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = PlotSCOSvsTime(recordName,windowSize,plotFlag,maskInput)
 %  GUI mode:   - Choose the recording *folder*
 %              - Choose widow size on which to do the std ( it will be used in stdfilter() function in order to calc the local std)
 %              - First frame of the recording will appear, and then the
@@ -20,7 +20,7 @@
 %                boolaen map (same size as record two first dimentions
 %  ---------------------------------------------------------------------------------------------------------
 
-function [ timeVec, rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, imMeanVec , info] = ...
+function [ timeVec, rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = ...
     SCOSvsTime_WithNoiseSubtraction(recordName,backgroundName,windowSize,plotFlag,maskInput)
 if nargin <3
     plotFlag = true;
@@ -60,10 +60,14 @@ if nargin == 0 % GUI mode
         errordlg(['Window Size must be a number between ' num2str(minWindowSize)  ' and ' num2str( num2str(maxWindowSize) ) ]);
         error(['Window Size must be a number between ' num2str(minWindowSize)  ' and ' num2str( num2str(maxWindowSize) ) ])
     end
-    
-    
-    backgroundName = uigetdir( fileparts(recordName) ,'Please Select the background');    
     clear answer
+    
+    dir_Background = [ dir([fileparts(recordName) , '\DarkIm*']) dir([fileparts(recordName) , '\Background*']) ] ;
+    if isempty(dir_Background) || numel(dir_Background) > 1
+        backgroundName = uigetdir( fileparts(recordName) ,'Please Select the background');    
+    else
+        backgroundName = fullfile(fileparts(recordName),dir_Background(1).name);
+    end
 end
 
 %% Create Mask
@@ -106,9 +110,15 @@ end
 
 if ~exist('mask','var')    
     if ~loadExistingFile_flag
-        [channels, masks, totMask, figIm] = CreateMask(recordName);
+        % [channels, masks, totMask, figIm] = CreateMask(recordName);
+        % TBD!
+        [ mask , circ ] = GetROI(mean(ReadRecord(recordName,20),3));
+        masks{1} = mask;
+        channels.Centers = circ.Center;
+        channels.Radii = circ.Radius;
+        totMask = mask;
         save(maskFile,'masks','channels','totMask');
-        close(figIm)
+        % close(figIm)
     else 
         M = load(maskFile);
         if isfield(M,'mask')
@@ -183,19 +193,29 @@ if ~isequal(size(background),size(im1))
 end
 %% Get ReadoutNoise (for current Gain)
 nOfBits = info.nBits;
-camDataFolder = [fileparts(mfilename('fullpath')) '\camerasData'];
-camDataFile = dir([ camDataFolder '\SN' num2str(info.cameraSN) '*readNoiseVsGain_Mono' num2str(nOfBits) '.mat']);
-if numel(camDataFile) == 0
-    error('Camera Data file was not found');
-elseif numel(camDataFile) > 1
-    disp(camDataFile.name)
-    error('more that one camera file was found');
-end
-
-dData = load([camDataFolder filesep camDataFile(1).name]); 
+% camDataFolder = [fileparts(mfilename('fullpath')) '\camerasData'];
+% camDataFile = dir([ camDataFolder '\SN' num2str(info.cameraSN) '*readNoiseVsGain_Mono' num2str(nOfBits) '.mat']);
+% if numel(camDataFile) == 0
+%     error('Camera Data file was not found');
+% elseif numel(camDataFile) > 1
+%     disp(camDataFile.name)
+%     error('more that one camera file was found');
+% end
+% 
+% dData = load([camDataFolder filesep camDataFile(1).name]); 
 maxCapacity = 10.5e3;% [e]
 actualGain = ConvertGain(info.name.Gain,nOfBits,maxCapacity);
-readoutN   = interp1(ConvertGain(dData.gainArr,nOfBits,maxCapacity),dData.tempNoise, actualGain ,'spline');
+% readoutN   = interp1(ConvertGain(dData.gainArr,nOfBits,maxCapacity),dData.tempNoise, actualGain ,'spline');
+dir_ReadoutNoise = dir([fileparts(recordName) , '\ReadNoise*']);
+if isempty(dir_ReadoutNoise) || numel(dir_ReadoutNoise) > 1
+    [folderReadNoise] = uigetdir(fileparts(recordName),'Please Enter Path to Read Noise Recording');
+else
+    folderReadNoise = fullfile(fileparts(recordName) , dir_ReadoutNoise(1).name);
+end
+disp('Calc ReadNoise Mat')
+recReadNoise = ReadRecord(folderReadNoise);
+readNoiseMat = std(recReadNoise,0,3);
+readNoise = imboxfilt(readNoiseMat,windowSize) ;    
 
 %% Calc spatialNoise 
 disp('Calc Spatial Noise');
@@ -210,7 +230,7 @@ spVar = stdfilt( spIm ,true(windowSize)).^2;
 disp(['Calculating SCOS on "' recordName '" ... ']);
 nOfChannels = numel(masks);
 % init loop vars
-[ rawSpeckleContrast , corrSpeckleContrast , imMeanVec] =InitNaN([nOfFrames 1],nOfChannels);
+[ rawSpeckleContrast , corrSpeckleContrast , meanVec] =InitNaN([nOfFrames 1],nOfChannels);
 for i=1:nOfFrames
     if mod(i,50) == 0; fprintf('%d\t',i); end
     im = ReadRecord(recordName,1,i);
@@ -225,8 +245,8 @@ for i=1:nOfFrames
 %         rawSpeckleContrast(i) = mean((stdIm_raw(masks{ch}) ./ meanIm(masks{ch}))).^2;
         
         rawSpeckleContrast{ch}(i) = mean((stdIm(masks{ch}).^2 ./ fittedISquare(masks{ch})));
-        corrSpeckleContrast{ch}(i) = mean( ( stdIm(masks{ch})^2 - actualGain.*fittedI(masks{ch})  - spVar(masks{ch}) - 1/12 - readoutN^2)./fittedISquare(masks{ch}) ); % - ( readoutN^2 )./fittedISquare(masks{ch}) );
-        imMeanVec{ch}(i) = meanFrame;
+        corrSpeckleContrast{ch}(i) = mean( ( stdIm(masks{ch}).^2 - actualGain.*fittedI(masks{ch})  - spVar(masks{ch}) - 1/12 - readNoise(masks{ch}).^2)./fittedISquare(masks{ch}) ); % - ( readoutN^2 )./fittedISquare(masks{ch}) );
+        meanVec{ch}(i) = meanFrame;
     end 
 end
 fprintf('\n');
@@ -236,7 +256,7 @@ p2p_time = timeVec<timePeriodForP2P;
 %% Save
 stdStr = sprintf('Std%dx%d',windowSize,windowSize);
 delete([recSavePrefix 'Local' stdStr '.mat']); % just for it to have the right date
-save([recSavePrefix 'Local' stdStr '_corr.mat'],'timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'imMeanVec', 'info','nOfChannels', 'recordName','windowSize');
+save([recSavePrefix 'Local' stdStr '_corr.mat'],'timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recordName','windowSize');
 
 %% Plot
 infoFields = fieldnames(info.name);
@@ -269,7 +289,7 @@ if  plotFlag
         ylabel(' FFT ')
         title(sprintf('Raw FFT: SNR=%.2g Pulse=%.0fbpm',raw_SNR,raw_pulseBPM));
     subplot(3,2,5);
-        plot(timeVec,imMeanVec{1});
+        plot(timeVec,meanVec{1});
         ylabel('I [DU]')
         
 
@@ -300,7 +320,7 @@ if exist('rawSpeckleContrast_jumpsCorrected','var')
         end
     end
     stdStr = sprintf('Std%dx%d',windowSize,windowSize);
-    save([recSavePrefix 'Local' stdStr '_corr.mat'],'timeVec', 'frameRate','corrSpeckleContrast' , 'rawSpeckleContrast','imMeanVec', 'info', 'recordName','windowSize','rawSpeckleContrast_jumpsCorrected','corrSpeckleContrast_jumpsCorrected');    
+    save([recSavePrefix 'Local' stdStr '_corr.mat'],'timeVec', 'frameRate','corrSpeckleContrast' , 'rawSpeckleContrast','meanVec', 'info', 'recordName','windowSize','rawSpeckleContrast_jumpsCorrected','corrSpeckleContrast_jumpsCorrected');    
 
     for ch = 1:nOfChannels
         [raw_SNR2,  raw_FFT2 , raw_freq2, raw_pulseFreq2, raw_pulseBPM2] = CalcSNR_Pulse(rawSpeckleContrast_jumpsCorrected{ch},frameRate,false);
@@ -312,14 +332,14 @@ if exist('rawSpeckleContrast_jumpsCorrected','var')
         subplot(Ny,Nx,1);
         plot(timeVec,rawSpeckleContrast{ch})
         ylabel('Kraw^2')
-        title(sprintf('Channel %d - Raw (<I>=%.0fDU) ',ch,mean(imMeanVec{ch})));
+        title(sprintf('Channel %d - Raw (<I>=%.0fDU) ',ch,mean(meanVec{ch})));
         xlim([0 timeVec(end)]);
         xlabel('Time [s]');
 
         subplot(Ny,Nx,2);
         plot(timeVec,rawSpeckleContrast_jumpsCorrected{ch})
         ylabel('Kraw^2')
-        title(sprintf('Channel %d - Raw (<I>=%.0fDU) - Jumps corrected',ch,mean(imMeanVec{ch})));
+        title(sprintf('Channel %d - Raw (<I>=%.0fDU) - Jumps corrected',ch,mean(meanVec{ch})));
         xlim([0 timeVec(end)]);
         xlabel('Time [s]');
 
@@ -333,14 +353,14 @@ if exist('rawSpeckleContrast_jumpsCorrected','var')
         subplot(Ny,Nx,4);
         plot(timeVec,corrSpeckleContrast{ch})
         ylabel('Kraw^2')
-        title(sprintf('Channel %d - Corr (<I>=%.0fDU) ',ch,mean(imMeanVec{ch})));
+        title(sprintf('Channel %d - Corr (<I>=%.0fDU) ',ch,mean(meanVec{ch})));
         xlim([0 timeVec(end)]);
         xlabel('Time [s]');
         
         subplot(Ny,Nx,5);
         plot(timeVec,corrSpeckleContrast_jumpsCorrected{ch})
         ylabel('Kraw^2')
-        title(sprintf('Channel %d - Corr (<I>=%.0fDU) - Jumps corrected',ch,mean(imMeanVec{ch})));
+        title(sprintf('Channel %d - Corr (<I>=%.0fDU) - Jumps corrected',ch,mean(meanVec{ch})));
         xlim([0 timeVec(end)]);
         xlabel('Time [s]');
 
@@ -368,14 +388,14 @@ if plotFlag
             warning(err.message);
         end
         subplot(nOfChannels,Nx,Nx*(Ch-1)+1);
-            plot(timeVec,imMeanVec{Ch});
-            title(sprintf('Channel %d - mean I (<I>=%.0fDU  %.1%%)',Ch,mean(imMeanVec{Ch}),mean(imMeanVec{Ch})/2^nOfBits*100));
+            plot(timeVec,meanVec{Ch});
+            title(sprintf('Channel %d - mean I (<I>=%.0fDU  %.1%%)',Ch,mean(meanVec{Ch}),mean(meanVec{Ch})/2^nOfBits*100));
             xlim([0 timeVec(end)]);
             xlabel('Time [s]')
         subplot(nOfChannels,Nx,Nx*(Ch-1)+2);
             plot(timeVec,rawSpeckleContrast_jumpsCorrected{Ch})
             ylabel('Kraw^2')
-            title(sprintf('Channel %d - Raw (<I>=%.0fDU  %.1f%%)',Ch,mean(imMeanVec{Ch})));
+            title(sprintf('Channel %d - Raw (<I>=%.0fDU  %.1f%%)',Ch,mean(meanVec{Ch})));
             xlim([0 timeVec(end)]);
             xlabel('Time [s]')
         subplot(nOfChannels,Nx,Nx*(Ch-1)+3);
@@ -395,14 +415,14 @@ if plotFlag
             warning(err.message);
         end
         subplot(nOfChannels,Nx,Nx*(Ch-1)+1);
-            plot(timeVec,imMeanVec{Ch});
-            title(sprintf('Channel %d - mean I (<I>=%.0fDU)',Ch,mean(imMeanVec{Ch})));
+            plot(timeVec,meanVec{Ch});
+            title(sprintf('Channel %d - mean I (<I>=%.0fDU)',Ch,mean(meanVec{Ch})));
             xlim([0 timeVec(end)]);
             xlabel('Time [s]')
         subplot(nOfChannels,Nx,Nx*(Ch-1)+2);
             plot(timeVec,corrSpeckleContrast_jumpsCorrected{Ch})
             ylabel('Kraw^2')
-            title(sprintf('Channel %d - Corr (<I>=%.0fDU)',Ch,mean(imMeanVec{Ch})));
+            title(sprintf('Channel %d - Corr (<I>=%.0fDU)',Ch,mean(meanVec{Ch})));
             xlim([0 timeVec(end)]);
             xlabel('Time [s]')
         subplot(nOfChannels,Nx,Nx*(Ch-1)+3);

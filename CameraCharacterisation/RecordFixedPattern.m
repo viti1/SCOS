@@ -208,7 +208,7 @@ legend(strcat({'Gain '} , num2cellstr(gainArr), 'dB'),'location','best');
 ylabel('Contrast');
 xlabel('<I> [DU]')
 
-;
+
 %% From White paper - Same Intensity
 fixedPatternFolder = [ noiseFolder '\WhitePaper_SameIntensity4' ];
 
