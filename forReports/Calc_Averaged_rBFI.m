@@ -25,7 +25,7 @@ if ~exist('avgWindowSeconds','var')
             error(['Illeagal answer for averaging window "' answer '"']);
         end
     else    
-        avgWindowSeconds = 20;
+        avgWindowSeconds = 5;
     end
 end
 
@@ -304,9 +304,9 @@ if strcmp(taskName,'Verbal') || strcmp(taskName,'nBack')
         end
         if channel_i == 1
             if nOfChannels==1
-                title({titleStart ,['rBFI average for ' num2str(numel(choose_epoches)) ' epoches (' num2str(avgWindowSeconds) ' sec fileter)'] });
+                title({titleStart ,['rBFI average for ' num2str(numel(choose_epoches)) ' epoches (' num2str(avgWindowSeconds) ' sec filter)'] });
             else
-                title({titleStart ,['rBFI average for ' num2str(numel(choose_epoches)) ' epoches (' num2str(avgWindowSeconds) ' sec fileter)'] , 'Channel 1'});
+                title({titleStart ,['rBFI average for ' num2str(numel(choose_epoches)) ' epoches (' num2str(avgWindowSeconds) ' sec filter)'] , 'Channel 1'});
             end
         else
             title(sprintf('Channel %d',channel_i));
