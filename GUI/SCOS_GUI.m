@@ -67,7 +67,8 @@ end
 handles.tgl_startVideo.UserData.saveEachNframes = 200;
 
 
-handles.fig_SCOS_GUI.UserData.CamData.videoFormat = 'Mono8';
+handles.fig_SCOS_GUI.UserData.CamData.videoFormat = 'Mono12';
+handles.fig_SCOS_GUI.UserData.CamData.triggerSource = 'Line4';
 switch  handles.fig_SCOS_GUI.UserData.CamData.videoFormat
     case 'Mono8'
         handles.fig_SCOS_GUI.UserData.CamData.maxGain = 36;
@@ -292,6 +293,7 @@ function chk_externalTrigger_Callback(hObject, eventdata, handles)
             set( src, 'TriggerMode', 'on');
             src.TriggerMode = 'on';
             set( src, 'AcquisitionFrameRateEnable' , 'False'); % not sure it's really needed
+            set( src, 'TriggerSource' ,handles.fig_SCOS_GUI.UserData.CamData.triggerSource)
         else
             set( src, 'TriggerMode', 'off');
             set( src, 'AcquisitionFrameRateEnable' , 'True'); 
@@ -304,6 +306,7 @@ function chk_externalTrigger_Callback(hObject, eventdata, handles)
         if hObject.Value
             set( handles.tgl_startVideo.UserData.src,'TriggerMode' , 'on'); 
             set( handles.tgl_startVideo.UserData.src, 'AcquisitionFrameRateEnable','False');
+            set( handles.tgl_startVideo.UserData.src, 'TriggerSource' ,handles.fig_SCOS_GUI.UserData.CamData.triggerSource)
         else
             set( handles.tgl_startVideo.UserData.src ,'TriggerMode' ,'off' );
             set( handles.tgl_startVideo.UserData.src, 'AcquisitionFrameRateEnable','True');  
@@ -661,7 +664,7 @@ else %  get(hObject,'String') == 'Start Video'
     else
         src = hObject.UserData.src;
     end
-    
+    set(src,'TriggerSource',handles.fig_SCOS_GUI.UserData.CamData.triggerSource)
     detectorName = 'Basler_1440GS_Vika01'; 
     dData = load([fileparts(fileparts(mfilename('fullpath'))) '\camerasData\' detectorName '\readNoiseVsGain.mat']);  % detector Data
    
@@ -699,7 +702,7 @@ else %  get(hObject,'String') == 'Start Video'
             tm = toc(hObject.UserData.resetSCOS_clock) ;
         end
 %         fprintf('%d \t',size(currImagesBuff,3)-1);
-        if mod(k,30)==0; fprintf('\n'); end
+%         if mod(k,30)==0; fprintf('\n'); end
         im = squeeze( currImagesBuff(:,:,end,end) );
         numOfMissedFrames = numOfMissedFrames + size(currImagesBuff,3)-1;
         % --- Show in Axis -------------------------
@@ -830,7 +833,7 @@ end
 
 %% Delete vid if there is one opened
 objects = imaqfind;
-if numel(objects)>0;  delete(objects(1)); end
+if numel(objects)>0;  delete(objects); end
 
 %% Save
 scosData = handles.tgl_startVideo.UserData.scosData;

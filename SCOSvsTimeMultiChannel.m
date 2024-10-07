@@ -89,8 +89,10 @@ if  isstruct(resetMask)
     channels.Centers = resetMask.circ.Center;
     channels.Radii   = resetMask.circ.Radius;
 elseif  ~exist(maskFile,'file') || isequal(resetMask,1) || isequal(resetMask,true)
-
-%     savefig(figIm,[recordName '\ImWithChannels.fig']);
+    [ mask , circ , figIm] = GetROI(mean(ReadRecord(recordName,20),3));
+    masks{1} = mask;
+    totMask = mask;
+    savefig(figIm,[recordName '\ImWithChannels.fig']);
     save(maskFile,'channels','masks','totMask');
 else
     M = load(maskFile);

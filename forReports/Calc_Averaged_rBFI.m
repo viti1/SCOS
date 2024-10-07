@@ -1,4 +1,4 @@
-function [fig1,fig2,avgBFI,avgK2,timeVec_cut]  = Calc_Averaged_rBFI(recName,avgWindowSeconds,titleAddText,useCorrected)
+function [fig1,fig2,avgBFI,timeVec_cut, avgOverEpoch , stdOverEpoch]  = Calc_Averaged_rBFI(recName,avgWindowSeconds,titleAddText,useCorrected,plotStd,choose_epoches)
 
 %% User Input
 if ~exist('recName','var')    
@@ -10,6 +10,9 @@ if ~exist('recName','var')
     save('lastFolder.mat','lastFolder');
 end
 
+if exist(recName,'file') ~= 7
+   error([recName ' record does not exist!']); 
+end
 if ~exist('titleAddText','var')
     titleAddText = ''; %'right position 9&10';
 end
@@ -22,7 +25,7 @@ if ~exist('avgWindowSeconds','var')
             error(['Illeagal answer for averaging window "' answer '"']);
         end
     else    
-        avgWindowSeconds = 20;
+        avgWindowSeconds = 5;
     end
 end
 
@@ -31,8 +34,12 @@ if ~exist('useCorrected','var')
 end
     
 plotOnlyBFI = 0;
-plotStd = 1;
-choose_epoches = []; %[3,4,5];
+if ~exist('plotStd','var') || isempty(plotStd)
+    plotStd = 1;
+end
+if ~exist('choose_epoches','var') || isempty(choose_epoches)
+    choose_epoches = []; %[3,4,5];
+end
 %%
 titlePrefix = '';
 if useCorrected
@@ -98,11 +105,12 @@ upFolders = strsplit(recName,filesep);
 shortRecName = strjoin(upFolders(end-2:end));
 
 %% Load the data
-if useCorrected
+% if useCorrected
     matName = dir([recName '\LocalStd9x9_corr.mat']);
-else
-    matName = dir([recName '\LocalStd9x9.mat']);
-end
+% else
+%     matName = dir([recName '\LocalStd9x9.mat']);
+% end
+
 D = load([ recName filesep matName(1).name]);
 
 %% Calc Averaged Signals
@@ -124,7 +132,7 @@ end
 secBeforeEpoch = 10;
 secAfterEpoch = 20;
 secForRef = 5;
-epochTime = 0:dt:(secBeforeEpoch+taskDuration+secAfterEpoch);
+epochTime = -secBeforeEpoch:dt:taskDuration+secAfterEpoch-dt;
 indForRef = 1:round(secForRef/dt);
 epoch = cell(1,nOfChannels);
 avgOverEpoch = cell(1,nOfChannels);
@@ -143,13 +151,20 @@ for channel_i = 1:nOfChannels
             contrastVec = D.corrSpeckleContrast{channel_i};
         end
     end
+    if ~isfield(D,'meanVec') 
+        if isfield(D,'imMeanVec')
+            D.meanVec = D.imMeanVec;
+        else
+            error('no meanVec or imMeanVec field in data file')
+        end
+    end
     avgI{channel_i}   = filter(meanFilter,1,D.meanVec{channel_i});
     avgI{channel_i}   = avgI{channel_i}(avgWindowSamples:end); %#ok<*AGROW>
     %         avgK2{channel_i}  = filter(meanFilter,1,contrastVec);
     %         avgK2{channel_i}  = avgK2{channel_i}(avgWindowSamples:end);
     avgBFI{channel_i} = filter(meanFilter,1,1./contrastVec);
     avgBFI{channel_i} = avgBFI{channel_i}(avgWindowSamples:end);
-    
+
     timeVec_cut = D.timeVec(avgWindowSamples:end);
     
     if numel(taskStart) > 1
@@ -173,6 +188,8 @@ for channel_i = 1:nOfChannels
         avgOverEpoch{channel_i}.rBFI = mean(epoch{channel_i}.rBFI,1,'omitnan');
         stdOverEpoch{channel_i}.rI = std(epoch{channel_i}.rI,0,1,'omitnan');
         stdOverEpoch{channel_i}.rBFI = std(epoch{channel_i}.rBFI,0,1,'omitnan');
+        avgOverEpoch{channel_i}.time = epochTime;
+        avgOverEpoch{channel_i}.time = epochTime;
     end
 end
 
@@ -197,11 +214,11 @@ for channel_i = 1:nOfChannels
             title(sprintf('Channel %d (avgI=%.1fDU)',channel_i,mean(D.meanVec{channel_i})));
         end
 
-        ylim = get(gca,'YLim');
+        ylims = get(gca,'YLim');
         for epoch_i=1:numel(taskStart)
-            patch([taskStart(epoch_i)  taskStart(epoch_i)+taskDuration , taskStart(epoch_i)+taskDuration taskStart(epoch_i)],[ylim(1) ylim(1) ylim(2) ylim(2)], taskColor,'EdgeColor','none','FaceAlpha',0.15);
+            patch([taskStart(epoch_i)  taskStart(epoch_i)+taskDuration , taskStart(epoch_i)+taskDuration taskStart(epoch_i)],[ylims(1) ylims(1) ylims(2) ylims(2)], taskColor,'EdgeColor','none','FaceAlpha',0.15);
         end
-        set(gca,'YLim',ylim);
+        set(gca,'YLim',ylims);
         set(gca,'XLim',[0 floor(timeVec_cut(end)) ]);
     end
     
@@ -220,11 +237,11 @@ for channel_i = 1:nOfChannels
         title(sprintf('Channel %d',channel_i));
     end
     
-    ylim = get(gca,'YLim');
+    ylims = get(gca,'YLim');
     for epoch_i=1:numel(taskStart)
-        patch([taskStart(epoch_i)  taskStart(epoch_i)+taskDuration , taskStart(epoch_i)+taskDuration taskStart(epoch_i)],[ylim(1) ylim(1) ylim(2) ylim(2)], taskColor,'EdgeColor','none','FaceAlpha',0.15);
+        patch([taskStart(epoch_i)  taskStart(epoch_i)+taskDuration , taskStart(epoch_i)+taskDuration taskStart(epoch_i)],[ylims(1) ylims(1) ylims(2) ylims(2)], taskColor,'EdgeColor','none','FaceAlpha',0.15);
     end
-    set(gca,'YLim',ylim);
+    set(gca,'YLim',ylims);
     set(gca,'XLim',[0 floor(timeVec_cut(end)) ]);
 end
 
@@ -265,9 +282,9 @@ if strcmp(taskName,'Verbal') || strcmp(taskName,'nBack')
                 end
             end
 
-            ylim = get(gca,'YLim');
-            patch([secBeforeEpoch  secBeforeEpoch+taskDuration , secBeforeEpoch+taskDuration secBeforeEpoch],[ylim(1) ylim(1) ylim(2) ylim(2)], taskColor,'EdgeColor','none','FaceAlpha',0.15);
-            set(gca,'YLim',ylim);
+            ylims = get(gca,'YLim');
+            patch([0  taskDuration , taskDuration 0],[ylims(1) ylims(1) ylims(2) ylims(2)], taskColor,'EdgeColor','none','FaceAlpha',0.15);
+            set(gca,'YLim',ylims);
         end
         
         % plot relative BFI for all epoches
@@ -287,18 +304,20 @@ if strcmp(taskName,'Verbal') || strcmp(taskName,'nBack')
         end
         if channel_i == 1
             if nOfChannels==1
-                title({titleStart ,['rBFI average for ' num2str(numel(choose_epoches)) ' epoches (' num2str(avgWindowSeconds) ' sec fileter)'] });
+                title({titleStart ,['rBFI average for ' num2str(numel(choose_epoches)) ' epoches (' num2str(avgWindowSeconds) ' sec filter)'] });
             else
-                title({titleStart ,['rBFI average for ' num2str(numel(choose_epoches)) ' epoches (' num2str(avgWindowSeconds) ' sec fileter)'] , 'Channel 1'});
+                title({titleStart ,['rBFI average for ' num2str(numel(choose_epoches)) ' epoches (' num2str(avgWindowSeconds) ' sec filter)'] , 'Channel 1'});
             end
         else
             title(sprintf('Channel %d',channel_i));
         end
-        
+        grid on
         %     set(gca,'YLim',fixed_ylim);
-        ylim = get(gca,'YLim');
-        patch([secBeforeEpoch  secBeforeEpoch+taskDuration , secBeforeEpoch+taskDuration secBeforeEpoch],[ylim(1) ylim(1) ylim(2) ylim(2)], taskColor,'EdgeColor','none','FaceAlpha',0.15);
-        set(gca,'YLim',ylim);
+        ylims = get(gca,'YLim');
+        patch([0  taskDuration , taskDuration 0],[ylims(1) ylims(1) ylims(2) ylims(2)], taskColor,'EdgeColor','none','FaceAlpha',0.15);
+        plot([0 0], ylims , ':', taskDuration*[1 1],ylims,'--')
+        set(gca,'YLim',ylims);
+        set(gca,'FontSize',14)
         
     end
     savefig(fig2,[recName '\averagedSignals_EpochPlotAverage_' num2str(avgWindowSeconds) 'sec_' savePrefix '.fig']);
@@ -306,4 +325,4 @@ end
         
 %% Save
 originalSpeckleContrast = D.rawSpeckleContrast;
-save([savePrefix '_averagedSignals_' num2str(avgWindowSeconds) 'sec.mat'],'avgI','avgBFI','originalSpeckleContrast');
+save([savePrefix '_averagedSignals_' num2str(avgWindowSeconds) 'sec.mat'],'avgI','avgBFI','originalSpeckleContrast','epochTime');

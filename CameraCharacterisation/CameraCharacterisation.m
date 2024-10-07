@@ -456,7 +456,7 @@ if rerecord_SN1
     camParams.BlackLevel = 0;
 
     vid = videoinput("gentl", 1, videoFormat);
-    files = cell(numel(DCN.gainArr), numel(DCN.expTArr));
+    files = cell(numel(SN1.gainArr), numel(SN1.expTArr));
     for gain = SN1.gainArr
         break_from_this_gain = false;
         for expT = SN1.expTArr
@@ -513,9 +513,17 @@ savefig(figSN1,[analysisFolder '.\ShotNoise_TemporalAndSpatial.fig'])
 %% Shot Noise - Temp Noise Vs Gain
 bitDepth = str2double(videoFormat(5:end)); % 8 or 12
 satCapacity = 10.5e3;
+figure;
 plot( ConvertGain(SN1.gainMat(:),bitDepth,satCapacity) , SN1.tempNoise(:)^2./SN1.meanI(:) ) ;
 xlabel(' G [DU/e-] ');
 ylabel(' Var(I)/<I> ');
+
+% Plot for single gain:
+figure;
+SN1.gainMat(;
+plot(SN1.meanI(:) , SN1.tempNoise(:)^2 ,'*') ;
+xlabel(' I' );
+ylabel(' Var(I) ');
 
 %% 4. Temperature influence
 % 1. Shot Noise
