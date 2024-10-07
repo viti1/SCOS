@@ -1,29 +1,29 @@
 %  ---------------------------------------------------------------------------------------------------------
 %  [ timeVec,  , rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = PlotSCOSvsTime(recordName,windowSize,plotFlag,maskInput)
-%  GUI mode:   - Choose the recording *folder*
-%              - Choose widow size on which to do the std ( it will be used in stdfilter() function in order to calc the local std)
-%              - First frame of the recording will appear, and then the
-%                user should create a circle with the ROI (Region of Interest)
-%                New figure will be created with speckleNoiseVec and speckleNoiseVecRel,
-%                which is speckleNoiseVec devided by the the mean intensity inside the mask)
+%  GUI mode:   - Choose the recording folder
+%              - Choose widow size ( it will be used in stdfilter() function in order to calc the local std)
+%              - Choose dark recording folder
+%
+%                First frame of the recording will appear, on witch the
+%                user should draw a circle with the ROI (Region of Interest)
+%                
 %                In the second time this function will run for the same
 %                recording , the ROI is already saved , so ne need to
 %                choose it again.
-%                If the recording is .tiff files, FR (FrameRate) parameter should appeare in the name of the folder.
-%                Example: murecord_FR20Hz 
-%               
+%                Main and dark recording folder names should be in the following format :
+%                <Name>_Gain<X>dB_expT<>ms_FR<X>Hz_BL<>DU 
+%                Where expT -> exposure time in ms, FR -> Frame Rate, BL -> Black Level
+%                If the dark recording is located in the same folder as the Main one, and starts with "background"
+%                it is automatically recognized.
+%
 %  Command Mode: Same as GUI mode , but recordName and windowSize variables must be specified. 
-%                plotFlag - [optional] create figure with 5 graphs, defualt
-%                = true
-%                
-%                maskInput - true (then all the image is taken as mask) or
-%                boolaen map (same size as record two first dimentions
+%                plotFlag - [optional] defualt= true                
+%                maskInput - can be "true" (then all the image is taken as mask) or
+%                a boolaen map the same size as the record.
 %  ---------------------------------------------------------------------------------------------------------
-% TBD
-% Add bad pixels!
 
 
-function [ timeVec, rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = ...
+function  [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , info] = ...
     SCOSvsTime_WithNoiseSubtraction_Ver2(recordName,backgroundName,windowSize,plotFlag,maskInput)
 if nargin <3
     plotFlag = true;
@@ -96,13 +96,29 @@ end
 
 maskFile = [recSavePrefix 'Mask.mat'];
 if exist('maskInput','var')
-    if isequal(maskInput, 1)
-        mask = true(size(mean_frame));
+    if isequal(maskInput, true)
+        masks = {true(size(mean_frame))};
+        totMask = masks{1};
+        disp('Mask is the whole image')
+    elseif iscell(maskInput)
+        masks = maskInput;
+        for k=1:numel(masks)
+            if ~isequal( size(masks{k}), size(mean_frame) ) 
+                error('wrong maskInput size, should be the same as the recording');
+            end
+        end
+        totMask = masks{1};
+        for k=2:numel(masks)
+            totMask = totMask | masks{k};
+        end
+        disp('Input mask is a cell array')
     elseif islogical(maskInput)
         if ~isequal( size(maskInput), size(mean_frame) ) 
             error('wrong maskInput');
         end
-        mask = maskInput;
+        masks = {maskInput};
+        totMask = masks{1};
+        disp('Input single mask')
     else
         error('wrong maskInput type');
     end
@@ -120,8 +136,9 @@ else
     end
 end
 
-if ~exist('mask','var')
-    ws2 = ceil(windowSize/2);
+% -- get ROI if needed and cut the margins 
+ws2 = ceil(windowSize/2); % for margins marking as false  
+if ~exist('masks','var')
     if ~loadExistingFile_flag
         % [channels, masks, totMask, figIm] = CreateMask(recordName);
         [ mask , circ , figMask] = GetROI(mean(ReadRecord(recordName,20),3));
@@ -133,14 +150,14 @@ if ~exist('mask','var')
         channels.Radii = circ.Radius;
         totMask = mask;
         save(maskFile,'masks','channels','totMask');
-        save(figMask,[recordName '\maskIm.fig'])
+        savefig(figMask,[recordName '\maskIm.fig'])
         % close(figIm)
     else 
         M = load(maskFile);
         if isfield(M,'mask')
             masks{1} = false(size(mask));
             masks{1}(ws2+1:end-ws2,ws2+1:end-ws2) = mask(ws2+1:end-ws2);
-            totMask = M.mask;
+            totMask = M.mask > 0;
             channels.Centers = M.circ.Center;
             channels.Radii  = M.circ.Radius;
         else
@@ -154,7 +171,12 @@ if ~exist('mask','var')
         end
     end
 else
-    
+    for k=1:numel(masks)
+        masks{k}( [ 1:ws2 (end-ws2+1):end ],:) = false; %#ok<AGROW>
+        masks{k}( : , [ 1:ws2 (end-ws2+1):end ]) = false; %#ok<AGROW>
+    end
+    totMask( [ 1:ws2 (end-ws2+1):end ], : ) = false;
+    totMask( : , [ 1:ws2 (end-ws2+1):end ]) = false;
 end
 
 %% Check info
@@ -184,8 +206,6 @@ else
     end
     frameRate = info.name.FR; 
 end
-
-
 %% Get Background and Background Noise
 start_calib_time = tic;
 disp('Load Background');
@@ -199,24 +219,29 @@ if ~isequal(backgroundName,0)
         if exist( [ backgroundName '\meanIm.mat'],'file')
             bgS = load([ backgroundName '\meanIm.mat']);            
             background = bgS.meanIm;
-            if isfield(bgS,'darkVar')
+            if isfield(bgS,'darkVar') 
                 darkVar = bgS.darkVar;
                 darkVarIm = bgS.darkVarIm;
-            else
-                darkRec = ReadRecord(backgroundName); 
-                background = mean(darkRec,3);
-                meanIm = background;
-                darkVarIm = std(darkRec,0,3).^2;
-                darkVar = imboxfilt(darkVarIm,windowSize) ;            
-                save([ backgroundName '\meanIm.mat'], 'meanIm','darkVar','darkVarIm');
+            else                      
+                delete([ backgroundName '\meanIm.mat']);
+                errordlg('Old version was saved , please run again');
+                error('Old version was saved , please run again');
             end
         else
-            darkRec = ReadRecord(backgroundName); 
-            background = mean(darkRec,3);
+            [ darkRec , infoBG ] = ReadRecord(backgroundName);
+            if ~isfield(infoBG.name , 'BL' )
+                BlackLevelBG = 0;
+            else
+                BlackLevelBG = infoBG.name.BL;
+            end
+            background = mean(darkRec,3) - BlackLevelBG;
+            if abs(mean2(background)) > 3
+                warning('Suspicious level of the background!');
+            end
             meanIm = background;
             darkVarIm = std(darkRec,0,3).^2;
             darkVar = imboxfilt(darkVarIm,windowSize) ;
-            save([ backgroundName '\meanIm.mat'], 'meanIm','darkVar','darkVarIm');
+            save([ backgroundName '\meanIm.mat'], 'meanIm','darkVar','darkVarIm');            
         end
         
     elseif endsWith(backgroundName,'.mat')
@@ -249,11 +274,23 @@ end
 nOfBits = info.nBits;
 
 % check if there is a measured value for this camera
+if ~isfield(info,'cameraSN') && isfield(info.name,'CameraSN')
+    info.cameraSN = num2str(info.name.CameraSN);
+end
+    
 switch info.cameraSN
     case '40335410' % Menahem Camera
         if info.nBits == 12 
             GainAt24dB = 5.8617;
             actualGain = GainAt24dB / 10^(24/20) * 10^(info.name.Gain/20);
+        end
+    case '00000000' % Tomoya Camera
+        if info.nBits == 12 
+            GainAt16dB = NaN;  % put your value here
+            actualGain = GainAt16dB / 10^(16/20) * 10^(info.name.Gain/20);
+        elseif info.nBits == 8
+            GainAt20dB = NaN;  % put your value here
+            actualGain = GainAt20dB / 10^(20/20) * 10^(info.name.Gain/20);            
         end
     case '40335401' % Vika Camera
         if info.nBits == 8
@@ -275,22 +312,29 @@ if ~exist('actualGain','var') || isempty(actualGain)
 end
 
 %% Calc spatialNoise 
+if ~isfield(info.name , 'BL' )
+    BlackLevel = 0;
+else
+    BlackLevel = infoBG.name.BL;
+end
+
 if isRecordFile
     smoothCoeffFile = [fileparts(recordName)  '\smoothingCoefficients.mat'];
 else
     smoothCoeffFile = [recordName  '\smoothingCoefficients.mat'];
 end
-if ~exist(smoothCoeffFile,'file')
+if ~exist(smoothCoeffFile,'file') 
+    % TBD check if it was calculated with the same mask
     disp('Calc Spatial Noise and Smoothing Coefficients');
     numFramesForSPNoise = 400;
     if nOfFrames > 500 ;  numFramesForSPNoise=500; end
-    spRec = ReadRecord(recordName,numFramesForSPNoise);
+    spRec = ReadRecord(recordName,numFramesForSPNoise) - BlackLevel;
     spIm = mean(spRec,3) - background;
-    fig_spIm = my_imagesc(spIm); title(['Image average ' nOfFrames ' frames'] );
+    fig_spIm = my_imagesc(spIm); title(['Image average ' num2str(nOfFrames) ' frames'] );
     savefig(fig_spIm, [recordName '\spIm.fig']);
     spVar = stdfilt( spIm ,true(windowSize)).^2;
     [fitI_A,fitI_B] = FitMeanIm(spRec,totMask,windowSize);
-    save(smoothCoeffFile,'spVar','fitI_A','fitI_B','spIm');
+    save(smoothCoeffFile,'spVar','fitI_A','fitI_B','spIm','totMask');
 else
     disp('Load Spatial Noise and Smoothing Coefficients');
     load(smoothCoeffFile);
@@ -299,33 +343,33 @@ end
 disp('Calibration Time')
 toc(start_calib_time)
 
-%% Calc Bad-Pixels Map
-% -- Temporal BP (using background rec)
-temporalBPThrechold = 100; %prctile(darkVarIm(:),99)
-bpTemporal =  darkVarIm > temporalBPThrechold;
-bpTemporalPcnt = round(nnz(bpTemporal)/numel(bpTemporal)*100,2);
-if bpTemporalPcnt > 4 
-    error('Too Many temporal bad pixels! (%g%%)',bpTemporalPcnt );
-elseif bpTemporalPcnt > 2 
-    warning('Too Many temporal bad pixels! (%g%%)', bpTemporalPcnt);
-    warndlg(sprintf('Too Many temporal bad pixels! (%g%%)', bpTemporalPcnt));
-end
-
-
-% -- Spatial BP (using the rec)
-hp_spIm = spIm - medfilt2(spIm,[5 5]);
-spatialBPThreshold = mean2(hp_spIm) + 6*std(hp_spIm(:));
-bpSpatial = abs(hp_spIm) > spatialBPThreshold;
-bpSpatialPcnt = round(nnz(bpSpatial)/numel(bpSpatial)*100,2);
-
-if bpSpatialPcnt > 4 
-    error('Too Many spatial bad pixels! (%.1g%%)', bpSpatialPcnt);
-elseif bpSpatialPcnt > 2
-    warning('Too Many spatial bad pixels! (%.1g%%)', bpSpatialPcnt);
-    warndlg(sprintf('Too Many spatial bad pixels! (%.1g%%)', bpSpatialPcnt));
-end
-
-bpMap = bpTemporal | bpSpatial;
+% %% Calc Bad-Pixels Map - Not used right now
+% % -- Temporal BP (using background rec)
+% temporalBPThrechold = 100; %prctile(darkVarIm(:),99)
+% bpTemporal =  darkVarIm > temporalBPThrechold;
+% bpTemporalPcnt = round(nnz(bpTemporal)/numel(bpTemporal)*100,2);
+% if bpTemporalPcnt > 4 
+%     error('Too Many temporal bad pixels! (%g%%)',bpTemporalPcnt );
+% elseif bpTemporalPcnt > 2 
+%     warning('Too Many temporal bad pixels! (%g%%)', bpTemporalPcnt);
+%     warndlg(sprintf('Too Many temporal bad pixels! (%g%%)', bpTemporalPcnt));
+% end
+% 
+% 
+% % -- Spatial BP (using the rec)
+% hp_spIm = spIm - medfilt2(spIm,[5 5]);
+% spatialBPThreshold = mean2(hp_spIm) + 6*std(hp_spIm(:));
+% bpSpatial = abs(hp_spIm) > spatialBPThreshold;
+% bpSpatialPcnt = round(nnz(bpSpatial)/numel(bpSpatial)*100,2);
+% 
+% if bpSpatialPcnt > 4 
+%     error('Too Many spatial bad pixels! (%.1g%%)', bpSpatialPcnt);
+% elseif bpSpatialPcnt > 2
+%     warning('Too Many spatial bad pixels! (%.1g%%)', bpSpatialPcnt);
+%     warndlg(sprintf('Too Many spatial bad pixels! (%.1g%%)', bpSpatialPcnt));
+% end
+% 
+% bpMap = bpTemporal | bpSpatial;
 %% Decrease Image Size
 [y,x] = find(totMask) ;
 roi_lims  = [ min(y)-windowSize  , max(y)+windowSize
@@ -348,7 +392,7 @@ end
    
 fitI_A_cut =  fitI_A(roi.y  , roi.x);
 fitI_B_cut =  fitI_B(roi.y  , roi.x);
-bpMap_cut = bpMap(roi.y  , roi.x);
+% bpMap_cut = bpMap(roi.y  , roi.x);
 %% Calc Specle Contrast
 disp(['Calculating SCOS on "' recordName '" ... ']);
 nOfChannels = numel(masks);
@@ -364,6 +408,7 @@ else
 end
 devide_by_16 = nOfBits == 12  && all(mod(im1(:),16) == 0);
 start_scos = tic;
+               
 for i=1:nOfFrames
     if mod(i,50) == 0 
         fprintf('%d\t',i); 
@@ -373,24 +418,26 @@ for i=1:nOfFrames
         end
     end
     if isRecordFile 
-        im = double(rec(:,:,i));
+        im_raw = double(rec(:,:,i));
     else
-        im = double(imread([recordName,filesep,frameNames(i).name])) ;   
+        im_raw = double(imread([recordName,filesep,frameNames(i).name])) ;   
         if devide_by_16
-            im = im/16;
+            im_raw = im_raw/16;
         end
+        im_raw = im_raw - BlackLevel;
     end
     
-    im = im - background;
-    im_cut = PixFix(im(roi.y  , roi.x),bpMap_cut);
+    im = im_raw - background;
+    im_cut = im(roi.y,roi.x);
     stdIm = stdfilt(im_cut,true(windowSize));
-%     meanIm = imfilter(im, true(windowSize)/windowSize^2,'conv','same'); 
+%     meanIm = imboxfilt(im_cut,windowSize); % TBD remove
     
     for ch = 1:nOfChannels
-        meanFrame = mean(im(masks_cut{ch}));
-        fittedI = fitI_A_cut*meanFrame + fitI_B_cut ;
-        fittedISquare = fittedI.^2;
+        meanFrame = mean(im_cut(masks_cut{ch}));
+        fittedI = fitI_A_cut*meanFrame + fitI_B_cut ; % TBD remove
         
+        fittedISquare = fittedI.^2;
+
         rawSpeckleContrast{ch}(i) = mean((stdIm(masks_cut{ch}).^2 ./ fittedISquare(masks_cut{ch})));
         corrSpeckleContrast{ch}(i) = mean( ( stdIm(masks_cut{ch}).^2 - actualGain.*fittedI(masks_cut{ch})  - spVar(masks_cut{ch}) - 1/12 - darkVar(masks_cut{ch}))./fittedISquare(masks_cut{ch}) ); % - ( readoutN^2 )./fittedISquare(masks{ch}) );
         meanVec{ch}(i) = meanFrame;
@@ -409,16 +456,19 @@ p2p_time = timeVec<timePeriodForP2P;
 stdStr = sprintf('Std%dx%d',windowSize,windowSize);
 if exist([recSavePrefix 'Local' stdStr '.mat'],'file'); delete([recSavePrefix 'Local' stdStr '.mat']); end % just for it to have the right date
 save([recSavePrefix 'Local' stdStr '_corr.mat'],'timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recordName','windowSize');
-
 %% Plot
 infoFields = fieldnames(info.name);
 if ~isfield(info.name,'Gain')
     info.name.Gain = '';
 end
+firtsParamValue = info.name.(infoFields{1});
+if ~ischar(firtsParamValue)
+    firtsParamValue = num2str(firtsParamValue);
+end
 if isfield(info.name,'SDS')
-    titleStr =  [ infoFields{1} ' SDS=' num2str(info.name.SDS)  '; exp=' num2str(info.name.expT)  'ms; Gain='  num2str(info.name.Gain) 'dB' ];
+    titleStr =  [ infoFields{1} firtsParamValue ' SDS=' num2str(info.name.SDS)  '; exp=' num2str(info.name.expT)  'ms; Gain='  num2str(info.name.Gain) 'dB' ];
 else
-    titleStr =  [ infoFields{1} '; exp=' num2str(info.name.expT)  'ms; Gain='  num2str(info.name.Gain) 'dB' ];
+    titleStr =  [ infoFields{1} firtsParamValue '; exp=' num2str(info.name.expT)  'ms; Gain='  num2str(info.name.Gain) 'dB' ];
 end
     
 [raw_SNR,  raw_FFT , raw_freq, raw_pulseFreq, raw_pulseBPM] = CalcSNR_Pulse(rawSpeckleContrast{1},frameRate);
@@ -433,7 +483,7 @@ if  plotFlag
         title({titleStr, 'Corrected Signal'})
     subplot(3,2,2);
         plot(corr_freq,corr_FFT)
-        ylabel(' FFT ')
+        ylabel(' FFT '); xlabel('f [Hz]')
         title(sprintf('Corrected FFT: SNR=%.2g Pulse=%.0fbpm',corr_SNR,corr_pulseBPM));
     subplot(3,2,3);
         plot(timeVec,rawSpeckleContrast{1})
@@ -441,14 +491,14 @@ if  plotFlag
         title('Raw Signal')
     subplot(3,2,4);
         plot(raw_freq,raw_FFT)
-        ylabel(' FFT ')
+        ylabel(' FFT '); xlabel('f[Hz]')
         title(sprintf('Raw FFT: SNR=%.2g Pulse=%.0fbpm',raw_SNR,raw_pulseBPM));
     subplot(3,2,5);
         plot(timeVec,meanVec{1});
         ylabel('I [DU]')
         
 
-        for plot_i=1:5
+        for plot_i=1:2:5
             subplot(3,2,plot_i);
             xlabel('Time [s]')
         end
@@ -591,8 +641,30 @@ end
 %         %     ylabel('Kf^2')
 %         %     title(sprintf('Channel %d - Corrected partly ',k));
 % end
-
+%% Plot rBFI
+if plotFlag
+    fig7 = figure('Name','rBFi','Units','Normalized','Position',[0.1,0.1,0.4,0.4]); 
+    subplot(2,1,1);
+    BFi = 1./corrSpeckleContrast{1};
+    % rBFi = BFi/prctile(BFi(1:round(10*frameRate)),5); % normalize by 5% percentile in first 10 sec
+    rBFi = BFi/mean(BFi(1:round(1*frameRate))); % normalize by first second
+    plot(timeVec,rBFi); 
+    title(titleStr)
+    xlabel('time [sec]')
+    ylabel('rBFi');
+    grid on
+    hold on;
+    set(gca,'FontSize',10);
+    subplot(2,1,2)
+    plot(timeVec,meanVec{1}); 
+    xlabel('time [sec]')
+    ylabel('<I> [DU]');
+    set(gca,'FontSize',10);
+    grid on
+    % tLim=10; subplot(2,1,1); xlim([0 tLim]); subplot(2,1,2); xlim([0 tLim])
+    savefig(fig7,[recSavePrefix '_rBFi.fig']);
+end
+%%
 toc(start_scos)
-
 end
 
