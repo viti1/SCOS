@@ -1,16 +1,16 @@
 % shotNoiseFolder = '..\Records\NoiseAndBackground\Basler_1440GS_Vika01\Mono8\FixedPattern\ShotNoise\vsExpTvsGain_1';
 % recShortName = 'WhitePaper_BackgroundWhitePaper_Intensity50_FR100Hz_Gain0dB_expT3ms_000';
 shotNoiseFolder = 'F:\SCOS\Records\NoiseAndBackground\Basler_1440GS_Menachem_SN40335410\Mono12';
-
-expT = 15;
-BlackLevel = 100;
+shotNoiseFolder = [getenv('USERPROFILE') '\OneDrive - Bar-Ilan University - Students\PhD Research\SCOS\Records\NoiseAndBackground\Menachem1440_SN40335410\mono12_Gain24'];
+expT = 0.5;
+BlackLevel = 0;
 nBits = 12;
-gainDB = 24;
-BlackLevelDark = 300;
-
-records = dir([shotNoiseFolder '\Gain' num2str(gainDB) 'dB_expT' num2str(expT) 'ms_I*']);
-darkRecFile = dir([shotNoiseFolder '\Gain' num2str(gainDB) 'dB_expT' num2str(expT) 'ms_Dark*']);
-darkIm = mean( ReadRecord([shotNoiseFolder filesep darkRecFile.name ],100) , 3) - BlackLevelDark;
+gainDB  = ExtractParametersFromString(shotNoiseFolder,'Gain');
+BlackLevelDark = 0;
+SN = num2str(ExtractParametersFromString(shotNoiseFolder(20:end),'SN'));
+records = dir([shotNoiseFolder '\*Gain' num2str(gainDB) 'dB_expT' num2str(expT) 'ms_I*']);
+darkRecFile = dir([shotNoiseFolder '\*Gain' num2str(gainDB) 'dB_expT' num2str(expT) 'ms_Dark*']);
+darkIm = mean( ReadRecord([shotNoiseFolder filesep darkRecFile.name ],68) , 3) - BlackLevelDark;
 
 [IPerRec , spPerRec , spPerRec_std] = InitNaN([1,numel(records)]);
 for ri = 1:numel(records)
@@ -52,7 +52,7 @@ text(xlims(2)*0.1 , ylims(2)* 0.8 ,{['Slope = ' num2str(G,3)],['CalcG = 2^{' num
 
 
 save([ shotNoiseFolder filesep 'Results_Gain' num2str(gainDB) 'dB_expT' num2str(expT) 'ms.mat' ],...
-    'IPerRec','spPerRec','spPerRec_std','expT','nBits','gainDB','Gcalc','G','BlackLevel','BlackLevelDark')
+    'IPerRec','spPerRec','spPerRec_std','expT','nBits','gainDB','Gcalc','G','BlackLevel','BlackLevelDark','SN')
 savefig(fig,[ shotNoiseFolder filesep 'Results_Gain' num2str(gainDB) 'dB_expT' num2str(expT) 'ms.fig' ]);
 
 
