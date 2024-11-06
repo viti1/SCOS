@@ -67,16 +67,17 @@ end
 handles.tgl_startVideo.UserData.saveEachNframes = 200;
 
 
-handles.fig_SCOS_GUI.UserData.CamData.videoFormat = 'Mono12';
-handles.fig_SCOS_GUI.UserData.CamData.triggerSource = 'Line4';
-switch  handles.fig_SCOS_GUI.UserData.CamData.videoFormat
-    case 'Mono8'
-        handles.fig_SCOS_GUI.UserData.CamData.maxGain = 36;
-    case 'Mono12'
-        handles.fig_SCOS_GUI.UserData.CamData.maxGain = 24;
-    otherwise 
-        error(['Unknown Video format "' handles.fig_SCOS_GUI.UserData.CamData.videoFormat '"']);
-end
+handles.fig_SCOS_GUI.UserData.CamData.videoFormat = 'Mono10';
+handles.fig_SCOS_GUI.UserData.CamData.triggerSource = 'Line2'; % TBD !!
+% switch  handles.fig_SCOS_GUI.UserData.CamData.videoFormat
+    handles.fig_SCOS_GUI.UserData.CamData.maxGain = 24;
+%     case 'Mono8'
+%         handles.fig_SCOS_GUI.UserData.CamData.maxGain = 36;
+%     case 'Mono12','Mono10
+%         handles.fig_SCOS_GUI.UserData.CamData.maxGain = 24;
+%     otherwise 
+%         error(['Unknown Video format "' handles.fig_SCOS_GUI.UserData.CamData.videoFormat '"']);
+% end
 handles.fig_SCOS_GUI.UserData.CamData.maxExpT = 10000; % in ms
 handles.fig_SCOS_GUI.UserData.CamData.maxTriggerDelay = 1e6; % in us
 
@@ -821,25 +822,25 @@ end
      
 %% === Close fig_SCOS_GUI ====
 function fig_SCOS_GUI_CloseRequestFcn(hObject, eventdata, handles)
+if ~isempty(handles)
+    if isfield(handles.tgl_startVideo.UserData,'vid') && isvalid(handles.tgl_startVideo.UserData.vid) && isrunning(handles.tgl_startVideo.UserData.vid)    
+        stop(handles.tgl_startVideo.UserData.vid);
+    end
+    pause(0.065); % let it stop from the btn_startVideo_Callback
+    if isfield(handles.tgl_startVideo.UserData,'vid') && isvalid(handles.tgl_startVideo.UserData.vid)
+        delete(handles.tgl_startVideo.UserData.vid);
+        isfield(handles.tgl_startVideo.UserData,'vid')
+    end
 
-if isfield(handles.tgl_startVideo.UserData,'vid') && isvalid(handles.tgl_startVideo.UserData.vid) && isrunning(handles.tgl_startVideo.UserData.vid)    
-    stop(handles.tgl_startVideo.UserData.vid);
+    %% Delete vid if there is one opened
+    objects = imaqfind;
+    if numel(objects)>0;  delete(objects); end
+
+    %% Save
+    scosData = handles.tgl_startVideo.UserData.scosData;
+    scosTime = handles.tgl_startVideo.UserData.scosTime;
+    save(hObject.UserData.recName,'scosData','scosTime');
 end
-pause(0.065); % let it stop from the btn_startVideo_Callback
-if isfield(handles.tgl_startVideo.UserData,'vid') && isvalid(handles.tgl_startVideo.UserData.vid)
-    delete(handles.tgl_startVideo.UserData.vid);
-    isfield(handles.tgl_startVideo.UserData,'vid')
-end
-
-%% Delete vid if there is one opened
-objects = imaqfind;
-if numel(objects)>0;  delete(objects); end
-
-%% Save
-scosData = handles.tgl_startVideo.UserData.scosData;
-scosTime = handles.tgl_startVideo.UserData.scosTime;
-save(hObject.UserData.recName,'scosData','scosTime');
-
 %% Close Fig
 pause(0.1)
 delete(hObject); %closes the figure

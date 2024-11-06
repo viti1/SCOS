@@ -70,7 +70,11 @@ end
 
 isRecordFile = exist(recordName,'file') == 2;
 if nargin == 0  || isempty(backgroundName)
-    dir_Background = [ dir([fileparts(recordName) , '\DarkIm*']) dir([fileparts(recordName) , '\background*']) dir([fileparts(recordName) , '\BG_*'])] ;
+    if exist([recordName , '_dark'],'dir')
+        dir_Background = [recordName , '_dark'];
+    else
+        dir_Background = [ dir([fileparts(recordName) , '\DarkIm*']) dir([fileparts(recordName) , '\background*']) dir([fileparts(recordName) , '\BG_*'])   ] ;
+    end
     if isempty(dir_Background) || numel(dir_Background) > 1
         if isRecordFile
             backgroundName = uigetfile( fileparts(recordName) ,'Please Select the background');
@@ -141,14 +145,11 @@ ws2 = ceil(windowSize/2); % for margins marking as false
 if ~exist('masks','var')
     if ~loadExistingFile_flag
         % [channels, masks, totMask, figIm] = CreateMask(recordName);
-        [ mask , circ , figMask] = GetROI(mean(ReadRecord(recordName,20),3));
+        [ totMask , circ , figMask] = GetROI(mean(ReadRecord(recordName,20),3),windowSize);
                 
-        masks{1} = false(size(mask));
-        masks{1}(ws2+1:end-ws2,ws2+1:end-ws2) = mask(ws2+1:end-ws2,ws2+1:end-ws2);
-        
+        masks{1} = totMask;       
         channels.Centers = circ.Center;
         channels.Radii = circ.Radius;
-        totMask = mask;
         save(maskFile,'masks','channels','totMask');
         savefig(figMask,[recordName '\maskIm.fig'])
         % close(figIm)
@@ -236,7 +237,8 @@ if ~isequal(backgroundName,0)
             end
             background = mean(darkRec,3) - BlackLevelBG;
             if abs(mean2(background)) > 3
-                warning('Suspicious level of the background!');
+                my_imagesc(background); title('Background'); 
+                warning('Suspicious level of the background %gDU !', round(mean2(background),2));
             end
             meanIm = background;
             darkVarIm = std(darkRec,0,3).^2;
@@ -281,8 +283,23 @@ end
 switch info.cameraSN
     case '40335410' % Menahem Camera
         if info.nBits == 12 
-            GainAt24dB = 5.8617;
-            actualGain = GainAt24dB / 10^(24/20) * 10^(info.name.Gain/20);
+            switch info.name.Gain
+                case 16
+                    actualGain = 2.3427;
+                case 20
+                    actualGain = 3.7251;
+                case 24
+                    actualGain = 5.8617;
+                otherwise 
+                    GainAt24dB = 5.8617;
+                    actualGain = GainAt24dB / 10^(24/20) * 10^(info.name.Gain/20);
+            end
+        elseif info.nBits == 8
+           
+            GainAt16dB = 0.146;
+            actualGain = GainAt16dB / 10^(16/20) * 10^(info.name.Gain/20);  
+        else
+            error([' Camera SN' info.cameraSN ' Is 12 or 8 Bits Only']);
         end
     case '00000000' % Tomoya Camera
         if info.nBits == 12 
@@ -297,8 +314,12 @@ switch info.cameraSN
             GainAt0dB = 0.0238;
             actualGain = GainAt0dB * 10^(info.name.Gain/20);
         end
+    case '40513592' % Nadav06 a2A1920-160umPRO Camera 
+        if info.nBits == 10
+           GainAt16dB = 0.5846;
+           actualGain = GainAt16dB * 10^((info.name.Gain-16)/20); 
+        end
 end
-
 
 if ~exist('actualGain','var') || isempty(actualGain)        
     if contains(recordName,'InGaAsNIT')        
@@ -315,7 +336,7 @@ end
 if ~isfield(info.name , 'BL' )
     BlackLevel = 0;
 else
-    BlackLevel = infoBG.name.BL;
+    BlackLevel = info.name.BL;
 end
 
 if isRecordFile
@@ -330,7 +351,7 @@ if ~exist(smoothCoeffFile,'file')
     if nOfFrames > 500 ;  numFramesForSPNoise=500; end
     spRec = ReadRecord(recordName,numFramesForSPNoise) - BlackLevel;
     spIm = mean(spRec,3) - background;
-    fig_spIm = my_imagesc(spIm); title(['Image average ' num2str(nOfFrames) ' frames'] );
+    fig_spIm = my_imagesc(spIm); title(['Image average ' num2str(numFramesForSPNoise) ' frames'] );
     savefig(fig_spIm, [recordName '\spIm.fig']);
     spVar = stdfilt( spIm ,true(windowSize)).^2;
     [fitI_A,fitI_B] = FitMeanIm(spRec,totMask,windowSize);
@@ -395,6 +416,7 @@ fitI_B_cut =  fitI_B(roi.y  , roi.x);
 % bpMap_cut = bpMap(roi.y  , roi.x);
 %% Calc Specle Contrast
 disp(['Calculating SCOS on "' recordName '" ... ']);
+disp(['Mono' num2str(nOfBits)]);
 nOfChannels = numel(masks);
 frameNames = dir([recordName '\*.tiff']);
 % init loop vars
@@ -407,14 +429,19 @@ else
 	im1 = double(imread([recordName,filesep,frameNames(1).name])) ;
 end
 devide_by_16 = nOfBits == 12  && all(mod(im1(:),16) == 0);
+devide_by_64 = nOfBits == 10  && all(mod(im1(:),64) == 0);
+
 start_scos = tic;
                
 for i=1:nOfFrames
-    if mod(i,50) == 0 
-        fprintf('%d\t',i); 
-        if i == 50
-            time50frames = toc(start_scos);
-            fprintf('\n Estimated Time = %g min \n',round(time50frames/50*nOfFrames/60,2))
+    if i == 50
+        time50frames = toc(start_scos);
+        fprintf('\n Estimated Time = %g min (%d frames)\n',round(time50frames/50*nOfFrames/60,2), nOfFrames)
+    end
+    if mod(i,200) == 0 
+        fprintf('%d\t',i);
+        if mod(i,2000) == 0
+            fprintf('\n');
         end
     end
     if isRecordFile 
@@ -423,6 +450,8 @@ for i=1:nOfFrames
         im_raw = double(imread([recordName,filesep,frameNames(i).name])) ;   
         if devide_by_16
             im_raw = im_raw/16;
+        elseif devide_by_64
+            im_raw = im_raw/64;
         end
         im_raw = im_raw - BlackLevel;
     end
@@ -434,7 +463,7 @@ for i=1:nOfFrames
     
     for ch = 1:nOfChannels
         meanFrame = mean(im_cut(masks_cut{ch}));
-        fittedI = fitI_A_cut*meanFrame + fitI_B_cut ; % TBD remove
+        fittedI = fitI_A_cut*meanFrame + fitI_B_cut ; 
         
         fittedISquare = fittedI.^2;
 
@@ -442,7 +471,7 @@ for i=1:nOfFrames
         corrSpeckleContrast{ch}(i) = mean( ( stdIm(masks_cut{ch}).^2 - actualGain.*fittedI(masks_cut{ch})  - spVar(masks_cut{ch}) - 1/12 - darkVar(masks_cut{ch}))./fittedISquare(masks_cut{ch}) ); % - ( readoutN^2 )./fittedISquare(masks{ch}) );
         meanVec{ch}(i) = meanFrame;
         if i==1
-            fprintf('K_raw = %.5g , Ks=%.5g , Kr=%.5g, Ksp=%.5g, Kq=%.5g, Kf=%.5g\n',rawSpeckleContrast{ch}(i), ...
+            fprintf('<I>=%.3gDU , K_raw = %.5g , Ks=%.5g , Kr=%.5g, Ksp=%.5g, Kq=%.5g, Kf=%.5g\n',meanFrame,rawSpeckleContrast{ch}(i), ...
                mean(actualGain.*fittedI(masks_cut{ch})./fittedISquare(masks_cut{ch})),mean(darkVar(masks_cut{ch})./fittedISquare(masks_cut{ch})),...
                mean(spVar(masks_cut{ch})./fittedISquare(masks_cut{ch})),mean(1./(12*fittedISquare(masks_cut{ch}))),corrSpeckleContrast{ch}(i));
         end
@@ -455,7 +484,9 @@ p2p_time = timeVec<timePeriodForP2P;
 %% Save
 stdStr = sprintf('Std%dx%d',windowSize,windowSize);
 if exist([recSavePrefix 'Local' stdStr '.mat'],'file'); delete([recSavePrefix 'Local' stdStr '.mat']); end % just for it to have the right date
-save([recSavePrefix 'Local' stdStr '_corr.mat'],'timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recordName','windowSize');
+firstFrameDir = dir([recordName,'\*_0001.tiff']);
+startDateTime = firstFrameDir.date;
+save([recSavePrefix 'Local' stdStr '_corr.mat'],'startDateTime','timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recordName','windowSize');
 %% Plot
 infoFields = fieldnames(info.name);
 if ~isfield(info.name,'Gain')
@@ -643,21 +674,29 @@ end
 % end
 %% Plot rBFI
 if plotFlag
-    fig7 = figure('Name','rBFi','Units','Normalized','Position',[0.1,0.1,0.4,0.4]); 
+    if timeVec(end) > 120
+        timeToPlot = timeVec / 60; % convert to min
+        xLabelStr = 'time [min]';
+    else
+        timeToPlot = timeVec ; % convert to min
+        xLabelStr = 'time [sec]';
+    end
+
+    fig7 = figure('Name',['rBFi: '  recordName ],'Units','Normalized','Position',[0.1,0.1,0.4,0.4]); 
     subplot(2,1,1);
     BFi = 1./corrSpeckleContrast{1};
     % rBFi = BFi/prctile(BFi(1:round(10*frameRate)),5); % normalize by 5% percentile in first 10 sec
     rBFi = BFi/mean(BFi(1:round(1*frameRate))); % normalize by first second
-    plot(timeVec,rBFi); 
+    plot(timeToPlot,rBFi); 
     title(titleStr)
-    xlabel('time [sec]')
+    xlabel(xLabelStr)
     ylabel('rBFi');
     grid on
     hold on;
     set(gca,'FontSize',10);
     subplot(2,1,2)
-    plot(timeVec,meanVec{1}); 
-    xlabel('time [sec]')
+    plot(timeToPlot,meanVec{1}); 
+    xlabel(xLabelStr)
     ylabel('<I> [DU]');
     set(gca,'FontSize',10);
     grid on
