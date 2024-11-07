@@ -22,7 +22,6 @@
 %                a boolaen map the same size as the record.
 %  ---------------------------------------------------------------------------------------------------------
 
-
 function  [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , info] = ...
     SCOSvsTime_WithNoiseSubtraction_Ver2(recordName,backgroundName,windowSize,plotFlag,maskInput)
 if nargin <3
@@ -71,18 +70,19 @@ end
 isRecordFile = exist(recordName,'file') == 2;
 if nargin == 0  || isempty(backgroundName)
     if exist([recordName , '_dark'],'dir')
-        dir_Background = [recordName , '_dark'];
+        backgroundName = [recordName , '_dark'];
     else
         dir_Background = [ dir([fileparts(recordName) , '\DarkIm*']) dir([fileparts(recordName) , '\background*']) dir([fileparts(recordName) , '\BG_*'])   ] ;
-    end
-    if isempty(dir_Background) || numel(dir_Background) > 1
-        if isRecordFile
-            backgroundName = uigetfile( fileparts(recordName) ,'Please Select the background');
+    
+        if  isempty(dir_Background) || numel(dir_Background) > 1 
+            if isRecordFile
+                backgroundName = uigetfile( fileparts(recordName) ,'Please Select the background');
+            else
+                backgroundName = uigetdir( fileparts(recordName) ,'Please Select the background'); 
+            end
         else
-            backgroundName = uigetdir( fileparts(recordName) ,'Please Select the background'); 
+            backgroundName = fullfile(fileparts(recordName),dir_Background(1).name);
         end
-    else
-        backgroundName = fullfile(fileparts(recordName),dir_Background(1).name);
     end
 end
 
@@ -222,7 +222,7 @@ if ~isequal(backgroundName,0)
             background = bgS.meanIm;
             if isfield(bgS,'darkVar') 
                 darkVar = bgS.darkVar;
-                darkVarIm = bgS.darkVarIm;
+                %darkVarIm = bgS.darkVarIm;
             else                      
                 delete([ backgroundName '\meanIm.mat']);
                 errordlg('Old version was saved , please run again');
@@ -243,6 +243,7 @@ if ~isequal(backgroundName,0)
             meanIm = background;
             darkVarIm = std(darkRec,0,3).^2;
             darkVar = imboxfilt(darkVarIm,windowSize) ;
+            clear darkRec
             save([ backgroundName '\meanIm.mat'], 'meanIm','darkVar','darkVarIm');            
         end
         
@@ -468,7 +469,7 @@ for i=1:nOfFrames
         fittedISquare = fittedI.^2;
 
         rawSpeckleContrast{ch}(i) = mean((stdIm(masks_cut{ch}).^2 ./ fittedISquare(masks_cut{ch})));
-        corrSpeckleContrast{ch}(i) = mean( ( stdIm(masks_cut{ch}).^2 - actualGain.*fittedI(masks_cut{ch})  - spVar(masks_cut{ch}) - 1/12 - darkVar(masks_cut{ch}))./fittedISquare(masks_cut{ch}) ); % - ( readoutN^2 )./fittedISquare(masks{ch}) );
+        corrSpeckleContrast{ch}(i) = mean( ( stdIm(masks_cut{ch}).^2 - actualGain.*fittedI(masks_cut{ch})  - spVar(masks_cut{ch}) - 1/12 - darkVar(masks_cut{ch}))./fittedISquare(masks_cut{ch}) ); 
         meanVec{ch}(i) = meanFrame;
         if i==1
             fprintf('<I>=%.3gDU , K_raw = %.5g , Ks=%.5g , Kr=%.5g, Ksp=%.5g, Kq=%.5g, Kf=%.5g\n',meanFrame,rawSpeckleContrast{ch}(i), ...
@@ -487,6 +488,7 @@ if exist([recSavePrefix 'Local' stdStr '.mat'],'file'); delete([recSavePrefix 'L
 firstFrameDir = dir([recordName,'\*_0001.tiff']);
 startDateTime = firstFrameDir.date;
 save([recSavePrefix 'Local' stdStr '_corr.mat'],'startDateTime','timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recordName','windowSize');
+
 %% Plot
 infoFields = fieldnames(info.name);
 if ~isfield(info.name,'Gain')
@@ -537,142 +539,12 @@ if  plotFlag
     savefig(fig,[recSavePrefix 'Local' stdStr '_plot.fig']);
 end
 
-% %% Correct Jumps
-% nOfChannels = numel(corrSpeckleContrast);
-% params = GetParamsFromFileName(recordName);
-% frameRate = params.FR;
-% for ch =1:nOfChannels
-%     rawSpeckleContrast_jumpsCorrected{ch}  = CorrectJumps(rawSpeckleContrast{ch});
-%     corrSpeckleContrast_jumpsCorrected{ch} = CorrectJumps(corrSpeckleContrast{ch});   
-% end
-% 
-% if exist('rawSpeckleContrast_jumpsCorrected','var') 
-%     if ~exist('recSavePrefix','var')
-%         if exist(recordName,'file') == 7 % it's a folder
-%             recSavePrefix = [ recordName filesep ];
-%         else % it's a file
-%             recSavePrefix = [ recordName(1:find(recordName=='.',1,'last')-1) '_' ];
-%         end
-%     end
-%     stdStr = sprintf('Std%dx%d',windowSize,windowSize);
-%     save([recSavePrefix 'Local' stdStr '_corr.mat'],'timeVec', 'frameRate','corrSpeckleContrast' , 'rawSpeckleContrast','meanVec', 'info', 'recordName','windowSize','rawSpeckleContrast_jumpsCorrected','corrSpeckleContrast_jumpsCorrected');    
-% 
-%     for ch = 1:nOfChannels
-%         [raw_SNR2,  raw_FFT2 , raw_freq2, raw_pulseFreq2, raw_pulseBPM2] = CalcSNR_Pulse(rawSpeckleContrast_jumpsCorrected{ch},frameRate,false);
-%         [corr_SNR2,  corr_FFT2 , corr_freq2, corr_pulseFreq2, corr_pulseBPM2] = CalcSNR_Pulse(corrSpeckleContrast_jumpsCorrected{ch},frameRate,false);
-% 
-%         fig_jump_corrected = figure('Units','Normalized','Position',[0.01 0.4 0.95 0.3]);
-%         Nx=3; Ny=2;
-%         
-%         subplot(Ny,Nx,1);
-%         plot(timeVec,rawSpeckleContrast{ch})
-%         ylabel('Kraw^2')
-%         title(sprintf('Channel %d - Raw (<I>=%.0fDU) ',ch,mean(meanVec{ch})));
-%         xlim([0 timeVec(end)]);
-%         xlabel('Time [s]');
-% 
-%         subplot(Ny,Nx,2);
-%         plot(timeVec,rawSpeckleContrast_jumpsCorrected{ch})
-%         ylabel('Kraw^2')
-%         title(sprintf('Channel %d - Raw (<I>=%.0fDU) - Jumps corrected',ch,mean(meanVec{ch})));
-%         xlim([0 timeVec(end)]);
-%         xlabel('Time [s]');
-% 
-%         subplot(Ny,Nx,3);
-%         plot(raw_freq2,raw_FFT2)
-%         ylabel(' FFT')
-%         title(sprintf('FFT - jumps corrected: SNR=%.2g Pulse=%.0fbpm',raw_SNR2,raw_pulseBPM2));
-%         xlim([0 raw_freq2(end)]);
-%         xlabel('Frequency [Hz]')
-% 
-%         subplot(Ny,Nx,4);
-%         plot(timeVec,corrSpeckleContrast{ch})
-%         ylabel('Kraw^2')
-%         title(sprintf('Channel %d - Corr (<I>=%.0fDU) ',ch,mean(meanVec{ch})));
-%         xlim([0 timeVec(end)]);
-%         xlabel('Time [s]');
-%         
-%         subplot(Ny,Nx,5);
-%         plot(timeVec,corrSpeckleContrast_jumpsCorrected{ch})
-%         ylabel('Kf^2')
-%         title(sprintf('Channel %d - Corr (<I>=%.0fDU) - Jumps corrected',ch,mean(meanVec{ch})));
-%         xlim([0 timeVec(end)]);
-%         xlabel('Time [s]');
-% 
-%         subplot(Ny,Nx,6);
-%         plot(corr_freq2,corr_FFT2)
-%         ylabel(' FFT')
-%         title(sprintf('FFT Corr - jumps corrected: SNR=%.2g Pulse=%.0fbpm',corr_SNR2,corr_pulseBPM2));
-%         xlim([0 corr_freq2(end)]);
-%         xlabel('Frequency [Hz]')
-% 
-%         savefig(fig_jump_corrected,[recSavePrefix 'Local' stdStr '_plot_jumps_corrected.fig']);
-%     end      
-% end
-% 
-% %% Plot Jump Corrected
-% %% Plot
-% Nx = 3;   
-% if plotFlag
-%     fig5 = figure('name',['SCOS ' shortRecName ' Mono' num2str(nOfBits) ],'Units','Normalized','Position',[0.01,1-0.16-nOfChannels*0.15,0.9,0.05+nOfChannels*0.15]);
-%     for Ch = 1:nOfChannels
-%         
-%         try
-%             [raw_SNR,  raw_FFT , raw_freq, raw_pulseFreq, raw_pulseBPM] = CalcSNR_Pulse(rawSpeckleContrast_jumpsCorrected{Ch},frameRate,false);
-%         catch err
-%             warning(err.message);
-%         end
-%         subplot(nOfChannels,Nx,Nx*(Ch-1)+1);
-%             plot(timeVec,meanVec{Ch});
-%             title(sprintf('Channel %d - mean I (<I>=%.0fDU  %.1%%)',Ch,mean(meanVec{Ch}),mean(meanVec{Ch})/2^nOfBits*100));
-%             xlim([0 timeVec(end)]);
-%             xlabel('Time [s]')
-%         subplot(nOfChannels,Nx,Nx*(Ch-1)+2);
-%             plot(timeVec,rawSpeckleContrast_jumpsCorrected{Ch})
-%             ylabel('Kraw^2')
-%             title(sprintf('Channel %d - Raw (<I>=%.0fDU  %.1f%%)',Ch,mean(meanVec{Ch})));
-%             xlim([0 timeVec(end)]);
-%             xlabel('Time [s]')
-%         subplot(nOfChannels,Nx,Nx*(Ch-1)+3);
-%             plot(raw_freq,raw_FFT)
-%             ylabel(' FFT ')
-%             title(sprintf('FFT: SNR=%.2g Pulse=%.0fbpm',raw_SNR,raw_pulseBPM));
-%             xlim([0 raw_freq(end)]);
-%             xlabel('Frequency [Hz]')
-%     end
-%     savefig(fig5,[recSavePrefix 'Contrast' stdStr '_jumpCorrected_plot_Raw.fig']);
-% 
-%     fig6 = figure('name',['SCOS ' shortRecName ' Mono' num2str(nOfBits)],'Units','Normalized','Position',[0.01,1-0.16-nOfChannels*0.15,0.9,0.05+nOfChannels*0.15]);
-%     for Ch = 1:nOfChannels        
-%         try
-%             [corr_SNR,  corr_FFT , corr_freq, corr_pulseFreq, corr_pulseBPM] = CalcSNR_Pulse(corrSpeckleContrast_jumpsCorrected{Ch},frameRate,false);
-%         catch err
-%             warning(err.message);
-%         end
-%         subplot(nOfChannels,Nx,Nx*(Ch-1)+1);
-%             plot(timeVec,meanVec{Ch});
-%             title(sprintf('Channel %d - mean I (<I>=%.0fDU)',Ch,mean(meanVec{Ch})));
-%             xlim([0 timeVec(end)]);
-%             xlabel('Time [s]')
-%         subplot(nOfChannels,Nx,Nx*(Ch-1)+2);
-%             plot(timeVec,corrSpeckleContrast_jumpsCorrected{Ch})
-%             ylabel('Kf^2')
-%             title(sprintf('Channel %d - Corr (<I>=%.0fDU)',Ch,mean(meanVec{Ch})));
-%             xlim([0 timeVec(end)]);
-%             xlabel('Time [s]')
-%         subplot(nOfChannels,Nx,Nx*(Ch-1)+3);
-%             plot(corr_freq,corr_FFT)
-%             ylabel(' FFT ')
-%             title(sprintf('FFT: SNR=%.2g Pulse=%.0fbpm',corr_SNR,corr_pulseBPM));
-%             xlim([0 corr_freq(end)]);
-%             xlabel('Frequency [Hz]')
-%     end
-%     savefig(fig6,[recSavePrefix 'Contrast' stdStr 'jumpCorrected_plot_noiseSubtracted.fig']);
-%             %     plot(timeVec,corrSpeckleContrast{k})
-%         %     ylabel('Kf^2')
-%         %     title(sprintf('Channel %d - Corrected partly ',k));
-% end
 %% Plot rBFI
+if any(corrSpeckleContrast{1} < 0 )
+    warning('Error: There are negative values in the contrast !!!');
+    warndlg('Error: There are negative values in the contrast !!! BFI has no meaning')
+end
+
 if plotFlag
     if timeVec(end) > 120
         timeToPlot = timeVec / 60; % convert to min
