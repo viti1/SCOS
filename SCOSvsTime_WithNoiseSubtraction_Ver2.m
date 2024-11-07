@@ -275,64 +275,8 @@ if ~isequal(size(background),size(im1))
 end
 %% Get G[DU/e]
 nOfBits = info.nBits;
-
-% check if there is a measured value for this camera
-if ~isfield(info,'cameraSN') && isfield(info.name,'CameraSN')
-    info.cameraSN = num2str(info.name.CameraSN);
-end
-    
-switch info.cameraSN
-    case '40335410' % Menahem Camera
-        if info.nBits == 12 
-            switch info.name.Gain
-                case 16
-                    actualGain = 2.3427;
-                case 20
-                    actualGain = 3.7251;
-                case 24
-                    actualGain = 5.8617;
-                otherwise 
-                    GainAt24dB = 5.8617;
-                    actualGain = GainAt24dB / 10^(24/20) * 10^(info.name.Gain/20);
-            end
-        elseif info.nBits == 8
-           
-            GainAt16dB = 0.146;
-            actualGain = GainAt16dB / 10^(16/20) * 10^(info.name.Gain/20);  
-        else
-            error([' Camera SN' info.cameraSN ' Is 12 or 8 Bits Only']);
-        end
-    case '00000000' % Tomoya Camera
-        if info.nBits == 12 
-            GainAt16dB = NaN;  % put your value here
-            actualGain = GainAt16dB / 10^(16/20) * 10^(info.name.Gain/20);
-        elseif info.nBits == 8
-            GainAt20dB = NaN;  % put your value here
-            actualGain = GainAt20dB / 10^(20/20) * 10^(info.name.Gain/20);            
-        end
-    case '40335401' % Vika Camera
-        if info.nBits == 8
-            GainAt0dB = 0.0238;
-            actualGain = GainAt0dB * 10^(info.name.Gain/20);
-        end
-    case '40513592' % Nadav06 a2A1920-160umPRO Camera 
-        if info.nBits == 10
-           GainAt16dB = 0.5846;
-           actualGain = GainAt16dB * 10^((info.name.Gain-16)/20); 
-        end
-end
-
-if ~exist('actualGain','var') || isempty(actualGain)        
-    if contains(recordName,'InGaAsNIT')        
-        maxCapacity = 17e3;% [e]
-        actualGain = ConvertGain(0,14,maxCapacity);
-    else % assume Basler Camera
-        maxCapacity = 10.5e3;% [e]
-        actualGain = ConvertGain(info.name.Gain,info.nBits,maxCapacity);
-    end
-    warning('Using Calculated Gain');
-end
-
+actualGain = GetActualGain(info);
+ 
 %% Calc spatialNoise 
 if ~isfield(info.name , 'BL' )
     BlackLevel = 0;
@@ -346,7 +290,7 @@ else
     smoothCoeffFile = [recordName  '\smoothingCoefficients.mat'];
 end
 if ~exist(smoothCoeffFile,'file') 
-    % TBD check if it was calculated with the same mask
+    % TBD check if it was calculated with the same mask & window size
     disp('Calc Spatial Noise and Smoothing Coefficients');
     numFramesForSPNoise = 400;
     if nOfFrames > 500 ;  numFramesForSPNoise=500; end
@@ -356,8 +300,10 @@ if ~exist(smoothCoeffFile,'file')
     savefig(fig_spIm, [recordName '\spIm.fig']);
     spVar = stdfilt( spIm ,true(windowSize)).^2;
     [fitI_A,fitI_B] = FitMeanIm(spRec,totMask,windowSize);
+    clear spRec
     save(smoothCoeffFile,'spVar','fitI_A','fitI_B','spIm','totMask');
 else
+    % TBD check if it was calculated with the same mask & window size
     disp('Load Spatial Noise and Smoothing Coefficients');
     load(smoothCoeffFile);
 end
@@ -365,33 +311,6 @@ end
 disp('Calibration Time')
 toc(start_calib_time)
 
-% %% Calc Bad-Pixels Map - Not used right now
-% % -- Temporal BP (using background rec)
-% temporalBPThrechold = 100; %prctile(darkVarIm(:),99)
-% bpTemporal =  darkVarIm > temporalBPThrechold;
-% bpTemporalPcnt = round(nnz(bpTemporal)/numel(bpTemporal)*100,2);
-% if bpTemporalPcnt > 4 
-%     error('Too Many temporal bad pixels! (%g%%)',bpTemporalPcnt );
-% elseif bpTemporalPcnt > 2 
-%     warning('Too Many temporal bad pixels! (%g%%)', bpTemporalPcnt);
-%     warndlg(sprintf('Too Many temporal bad pixels! (%g%%)', bpTemporalPcnt));
-% end
-% 
-% 
-% % -- Spatial BP (using the rec)
-% hp_spIm = spIm - medfilt2(spIm,[5 5]);
-% spatialBPThreshold = mean2(hp_spIm) + 6*std(hp_spIm(:));
-% bpSpatial = abs(hp_spIm) > spatialBPThreshold;
-% bpSpatialPcnt = round(nnz(bpSpatial)/numel(bpSpatial)*100,2);
-% 
-% if bpSpatialPcnt > 4 
-%     error('Too Many spatial bad pixels! (%.1g%%)', bpSpatialPcnt);
-% elseif bpSpatialPcnt > 2
-%     warning('Too Many spatial bad pixels! (%.1g%%)', bpSpatialPcnt);
-%     warndlg(sprintf('Too Many spatial bad pixels! (%.1g%%)', bpSpatialPcnt));
-% end
-% 
-% bpMap = bpTemporal | bpSpatial;
 %% Decrease Image Size
 [y,x] = find(totMask) ;
 roi_lims  = [ min(y)-windowSize  , max(y)+windowSize
@@ -460,13 +379,14 @@ for i=1:nOfFrames
     im = im_raw - background;
     im_cut = im(roi.y,roi.x);
     stdIm = stdfilt(im_cut,true(windowSize));
-%     meanIm = imboxfilt(im_cut,windowSize); % TBD remove
+%     meanIm = imboxfilt(im_cut,windowSize); 
     
     for ch = 1:nOfChannels
         meanFrame = mean(im_cut(masks_cut{ch}));
-        fittedI = fitI_A_cut*meanFrame + fitI_B_cut ; 
-        
+        fittedI = fitI_A_cut*meanFrame + fitI_B_cut ;         
         fittedISquare = fittedI.^2;
+%         fittedI = meanIm;
+%         fittedISquare = meanIm.^2;
 
         rawSpeckleContrast{ch}(i) = mean((stdIm(masks_cut{ch}).^2 ./ fittedISquare(masks_cut{ch})));
         corrSpeckleContrast{ch}(i) = mean( ( stdIm(masks_cut{ch}).^2 - actualGain.*fittedI(masks_cut{ch})  - spVar(masks_cut{ch}) - 1/12 - darkVar(masks_cut{ch}))./fittedISquare(masks_cut{ch}) ); 
