@@ -487,8 +487,9 @@ function btn_record_Callback(hObject, eventdata, handles)
 % eventdata  reserved - to be defined in a future version of MATLAB
 % handles    structure with handles and user data (see GUIDATA)
               
-currFolder = fileparts(mfilename('fullpath'));
-last_folder_matfile = [currFolder '\SCOS_GUI_lastrec.mat'];
+% currFolder = fileparts(mfilename('fullpath'));
+mfilefolder = fileparts(mfilename('fullpath'));
+last_folder_matfile = [mfilefolder '\SCOS_GUI_lastrec.mat'];
 if exist(last_folder_matfile,'file')
      tmp = load(last_folder_matfile);
      last_record_folder = tmp.recFolder;
@@ -500,7 +501,7 @@ else
 end
 
 if  last_record_folder == 0  
-    last_record_folder = [fileparts(currFolder) filesep 'Records']; 
+    last_record_folder = [fileparts(fileparts(mfilefolder)) filesep 'Records']; 
 end
 
 recFolder = uigetdir(fileparts(last_record_folder),'Please Select Folder in which to save recording');
