@@ -83,6 +83,10 @@ if nargin == 0  || isempty(backgroundName)
         else
             backgroundName = fullfile(fileparts(recordName),dir_Background(1).name);
         end
+        if isequal(backgroundName,0)
+            disp('Aborting...')
+            return;
+        end
     end
 end
 
@@ -190,7 +194,7 @@ im1 = ReadRecord(recordName,1);
 
 if backgroundName~=0
     info_background = GetRecordInfo(backgroundName);
-    fields = {'expT','Gain'};
+    fields = {'expT','Gain','BL'};
     for fi = 1:numel(fields)
         param = fields{fi};
         if info_background.name.(param) ~= info.name.(param)
@@ -210,65 +214,50 @@ end
 %% Get Background and Background Noise
 start_calib_time = tic;
 disp('Load Background');
-
-if ~isequal(backgroundName,0)
-    if ~exist(backgroundName,'file')
-        error([backgroundName,' does not exist!']);
-    end
-
-    if exist(backgroundName,'file') == 7 % it's a folder
-        if exist( [ backgroundName '\meanIm.mat'],'file')
-            bgS = load([ backgroundName '\meanIm.mat']);            
-            background = bgS.meanIm;
-            if isfield(bgS,'darkVar') 
-                darkVar = bgS.darkVar;
-                %darkVarIm = bgS.darkVarIm;
-            else                      
-                delete([ backgroundName '\meanIm.mat']);
-                errordlg('Old version was saved , please run again');
-                error('Old version was saved , please run again');
-            end
-        else
-            [ darkRec , infoBG ] = ReadRecord(backgroundName);
-            if ~isfield(infoBG.name , 'BL' )
-                BlackLevelBG = 0;
-            else
-                BlackLevelBG = infoBG.name.BL;
-            end
-            background = mean(darkRec,3) - BlackLevelBG;
-            if abs(mean2(background)) > 3
-                my_imagesc(background); title('Background'); 
-                warning('Suspicious level of the background %gDU !', round(mean2(background),2));
-            end
-            meanIm = background;
-            darkVarIm = std(darkRec,0,3).^2;
-            darkVar = imboxfilt(darkVarIm,windowSize) ;
-            clear darkRec
-            save([ backgroundName '\meanIm.mat'], 'meanIm','darkVar','darkVarIm');            
-        end
-        
-    elseif endsWith(backgroundName,'.mat')
-        bgS = load( backgroundName );
-        fields = fieldnames(bgS);
-        if ismember(fields, 'meanIm')
-            background = bgS.meanIm; 
-        elseif startsWith(fields{1}, 'Video')
-            darkRec = bgS.(fields{1});
-            meanIm = mean(darkRec,3);
-            bgS.meanIm = meanIm;
-            background = meanIm;
-            darkVarIm = std(darkRec,0,3).^2;
-            darkVar = imboxfilt(darkVarIm,windowSize) ;
-            bgS.darkVarIm = darkVarIm;
-            bgS.darkVar   = darkVar;
-            save(backgroundName,'-struct','bgS')
-        else
-            error('wrong fields')
-        end
-    end
-else 
-    background = zeros(size(im1));
+if ~exist(backgroundName,'file')
+    error([backgroundName,' does not exist!']);
 end
+
+if exist(backgroundName,'file') == 7 % it's a folder
+    if exist( [ backgroundName '\meanIm.mat'],'file')
+        bgS = load([ backgroundName '\meanIm.mat']);
+        if isfield(bgS,'recVar')
+            background = bgS.recMean - info_background.name.BL;
+            darkVar = bgS.recVar;
+        else
+            delete([ backgroundName '\meanIm.mat']);
+            [ background , darkVar ] = ReadRecordVarAndMean( backgroundName );
+            background =  background - info_background.name.BL;
+        end
+        clear bgS
+    else
+        [ background , darkVar ] = ReadRecordVarAndMean( backgroundName );
+        background =  background - info_background.name.BL;
+
+        if abs(mean2(background)) > 3
+            my_imagesc(background); title('Background');
+            warning('Suspicious level of the background %gDU !', round(mean2(background),2));
+        end        
+    end    
+elseif endsWith(backgroundName,'.mat')
+    bgS = load( backgroundName );
+    fields = fieldnames(bgS);
+    if ismember(fields, 'recMean')
+        background = bgS.recMean - info_background.name.BL;
+    elseif startsWith(fields{1}, 'Video')
+        darkRec = bgS.(fields{1}); 
+        bgS.recMean = mean(darkRec,3);
+        background = bgS.recMean - info_background.name.BL;
+        darkVar = std(darkRec,0,3).^2;
+        bgS.recVar   = darkVar;
+        save(backgroundName,'-struct','bgS')
+    else
+        error('wrong fields')
+    end
+    clear bgS
+end
+
+darkVarPerWindow = imboxfilt(darkVar,windowSize) ;
 
 if ~isequal(size(background),size(im1))
     error('The background should be the same picture size as the record. Record size is [%d,%d], but background size is [%d,%d]',size(im1,1), size(im1,2), size(background,1), size(background,1));

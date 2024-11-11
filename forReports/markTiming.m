@@ -1,7 +1,13 @@
 function markTiming(timingFile,startTime)
 % 
     T = readtable(timingFile);
-    
+    if nargin < 2
+        startTime = T.Time{1};
+    end
+    if nnz(startTime==':') == 1
+        startTime = [ startTime , ':00'] ;
+    end
+        
     ylims = get(gca,'YLim');
     xlims = get(gca,'XLim');
     dx = 0.01*diff(xlims);
