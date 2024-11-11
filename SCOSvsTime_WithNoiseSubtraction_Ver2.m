@@ -200,7 +200,8 @@ if backgroundName~=0
         if info_background.name.(param) ~= info.name.(param)
             error('Background.%s=%g   Record.%s=%g',param, info_background.name.(param), param, info_background.name.(param));
         end
-    end 
+    end
+
 end
 
 if isfield(info,'cam') && isfield(info.cam,'AcquisitionFrameRate')
@@ -218,9 +219,18 @@ if ~exist(backgroundName,'file')
     error([backgroundName,' does not exist!']);
 end
 
+requiredBG_nOfFrames = 400;
 if exist(backgroundName,'file') == 7 % it's a folder
     if exist( [ backgroundName '\meanIm.mat'],'file')
         bgS = load([ backgroundName '\meanIm.mat']);
+        if ~isfield(bgS,'nOfFrames') 
+            nOfFramesBG = GetNumOfFrames(backgroundName); 
+        else
+            nOfFramesBG = bgS.nOfFrames;
+        end
+        if   nOfFramesBG < requiredBG_nOfFrames
+            error('Not enough frames in background file. Required : %d , Exist : %d',requiredBG_nOfFrames,nOfFramesBG);
+        end
         if isfield(bgS,'recVar')
             background = bgS.recMean - info_background.name.BL;
             darkVar = bgS.recVar;
@@ -231,6 +241,10 @@ if exist(backgroundName,'file') == 7 % it's a folder
         end
         clear bgS
     else
+        nOfFramesBG = GetNumOfFrames(backgroundName);
+        if  nOfFramesBG < requiredBG_nOfFrames
+            error('Not enough frames in background file. Required : %d , Exist : %d',requiredBG_nOfFrames,nOfFramesBG);
+        end
         [ background , darkVar ] = ReadRecordVarAndMean( backgroundName );
         background =  background - info_background.name.BL;
 
