@@ -1,2 +1,5 @@
    objects = imaqfind;
-    if numel(objects)>0;  delete(objects); end
+   for k = 1:numel(objects)
+     stop( objects(k) );
+     delete(objects(k)); 
+   end
