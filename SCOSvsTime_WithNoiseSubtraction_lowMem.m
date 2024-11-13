@@ -267,7 +267,7 @@ nOfBits = info.nBits;
 actualGain = GetActualGain(info);
 
 %% Calc spatialNoise
-disp('Calculated Spatial Noise')
+disp('Calculate Spatial Noise')
 if ~isfield(info.name , 'BL' )    
     BlackLevel = 0;
 else
