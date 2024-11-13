@@ -351,8 +351,14 @@ if isRecordFile
 else
 	im1 = double(imread([recordName,filesep,frameNames(1).name])) ;
 end
-devide_by_16 = nOfBits == 12  && all(mod(im1(:),16) == 0);
-devide_by_64 = nOfBits == 10  && all(mod(im1(:),64) == 0);
+
+devide_by = 1;
+if nOfBits == 12  && all(mod(im1(:),2^4) == 0)
+    devide_by = 2^4;
+elseif nOfBits == 10  && all(mod(im1(:),2^6) == 0)
+    devide_by = 2^6;
+end
+
 
 start_scos = tic;
                
@@ -370,12 +376,7 @@ for i=1:nOfFrames
     if isRecordFile 
         im_raw = double(rec(:,:,i));
     else
-        im_raw = double(imread([recordName,filesep,frameNames(i).name])) ;   
-        if devide_by_16
-            im_raw = im_raw/16;
-        elseif devide_by_64
-            im_raw = im_raw/64;
-        end
+        im_raw = double(imread([recordName,filesep,frameNames(i).name])) / devide_by ;               
         im_raw = im_raw - BlackLevel;
     end
     
