@@ -72,7 +72,7 @@ if nargin == 0  || isempty(backgroundName)
     if exist([recordName , '_dark'],'dir')
         backgroundName = [recordName , '_dark'];
     else
-        dir_Background = [ dir([fileparts(recordName) , '\DarkIm*']) dir([fileparts(recordName) , '\background*']) dir([fileparts(recordName) , '\BG_*'])   ] ;
+        dir_Background = [];%[ dir([fileparts(recordName) , '\DarkIm*']) dir([fileparts(recordName) , '\background*']) dir([fileparts(recordName) , '\BG_*'])   ] ;
     
         if  isempty(dir_Background) || numel(dir_Background) > 1 
             if isRecordFile
@@ -470,26 +470,28 @@ if any(corrSpeckleContrast{1} < 0 )
 end
 
 if plotFlag
+    BFi = 1./corrSpeckleContrast{1};
     if timeVec(end) > 120
         timeToPlot = timeVec / 60; % convert to min
         xLabelStr = 'time [min]';
+        rBFi = BFi/mean(BFi(1:round(10*frameRate))); % normalize by first 10 seconds        
     else
         timeToPlot = timeVec ; % convert to min
         xLabelStr = 'time [sec]';
-    end
-
-    fig7 = figure('Name',['rBFi: '  recordName ],'Units','Normalized','Position',[0.1,0.1,0.4,0.4]); 
+        rBFi = BFi/prctile(BFi(1:round(10*frameRate)),5); % normalize by 5% percentile in first 10 sec
+    end   
+    
+    fig7 = figure('Name',['rBFi: '  recordName ],'Units','Normalized','Position',[0.1,0.1,0.4,0.4]);
     subplot(2,1,1);
-    BFi = 1./corrSpeckleContrast{1};
-    % rBFi = BFi/prctile(BFi(1:round(10*frameRate)),5); % normalize by 5% percentile in first 10 sec
-    rBFi = BFi/mean(BFi(1:round(1*frameRate))); % normalize by first second
-    plot(timeToPlot,rBFi); 
+    plot(timeToPlot,rBFi);
     title(titleStr)
     xlabel(xLabelStr)
-    ylabel('rBFi');
+    ylabel('rBFi');  
     grid on
     hold on;
     set(gca,'FontSize',10);
+%     title('CBF')
+    
     subplot(2,1,2)
     plot(timeToPlot,meanVec{1}); 
     xlabel(xLabelStr)
@@ -498,6 +500,8 @@ if plotFlag
     grid on
     % tLim=10; subplot(2,1,1); xlim([0 tLim]); subplot(2,1,2); xlim([0 tLim])
     savefig(fig7,[recSavePrefix '_rBFi.fig']);
+    set(gca,'FontSize',14);
+    title('Intensity')
 end
 %%
 toc(start_scos)

@@ -448,19 +448,19 @@ if any(corrSpeckleContrast{1} < 0 )
 end
 
 if plotFlag
+    BFi = 1./corrSpeckleContrast{1};
     if timeVec(end) > 120
         timeToPlot = timeVec / 60; % convert to min
         xLabelStr = 'time [min]';
+        rBFi = BFi/mean(BFi(1:round(10*frameRate))); % normalize by first 10 seconds        
     else
         timeToPlot = timeVec ; % convert to min
         xLabelStr = 'time [sec]';
-    end
+        rBFi = BFi/prctile(BFi(1:round(10*frameRate)),5); % normalize by 5% percentile in first 10 sec
+    end   
 
     fig7 = figure('Name',['rBFi: '  recordName ],'Units','Normalized','Position',[0.1,0.1,0.4,0.4]); 
-    subplot(2,1,1);
-    BFi = 1./corrSpeckleContrast{1};
-    % rBFi = BFi/prctile(BFi(1:round(10*frameRate)),5); % normalize by 5% percentile in first 10 sec
-    rBFi = BFi/mean(BFi(1:round(1*frameRate))); % normalize by first second
+    subplot(2,1,1);    
     plot(timeToPlot,rBFi); 
     title(titleStr)
     xlabel(xLabelStr)
