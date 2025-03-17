@@ -8,21 +8,21 @@ if exist('.\lastRec.mat','file')
 else
     lastF.recName = [ fileparts(pwd) '\Records' ];
 end
-% folder = 'C:\SCOS\Records\Tests\TestFromMatlab_onHead_Hospital';
-folder = uigetdir('C:\Users\viti_\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek\12.01.2025','Where to Save?');
+folder = 'C:\SCOS\Records\Tests\T4_Vika_5mmPrism_black_prob_white_triangle_2p5SDS_10min_expT10ms_Mono12';
+% folder = uigetdir(['C:\Users\' getenv('USERNAME') '\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek\12.01.2025'],'Where to Save?');
 if folder==0 ; return; end
 if ~exist(folder,'dir'); mkdir(folder); end
 lastF.recordName = folder;
 save('.\lastRec.mat','-struct','lastF')
-nOfFrames = Inf;
+nOfFrames = 600*2;
 nOfDarkFrames = 600;
 nForSP = 600;
 windowSize = 9;
 frameRate = 1/100e-3; % Hz 
-camParams.ExposureTime = 8000;
-camParams.Gain = 16;
-camParams.videoFormat = 'Mono10';
-camParams.BlackLevel = 100;
+camParams.ExposureTime = 10000;
+camParams.Gain = 8;  % use 8dB for 12bit
+camParams.videoFormat = 'Mono12';
+camParams.BlackLevel = 30;
 camParams.TriggerSource = 'Line2';  % Hirose - Line3 or Line1, M8 - Line2
 camParams.addToFilename.TriggerSource = false;
 camParams.addToFilename.TriggerMode = false;
@@ -31,7 +31,7 @@ camParams.addToFilename.videoFormat = false;
 setupParams.Laser = 'iBeam';
 setupParams.LaserPower = 120; %mW
 setupParams.Fiber = '90 deg 400um';
-setupParams.SDS = 3;
+setupParams.SDS = 2.5;
 
 saveTiff_flag = true;
 showEveryNframes = 50;
@@ -62,22 +62,22 @@ src = getselectedsource(vid);
 triggerconfig(vid, 'hardware');
 src.TriggerMode = 'On';
 
-start(vid)
-while(~vid.FramesAvailable); ; end
-tic
-getdata(vid, 1);
-while(~vid.FramesAvailable); ; end
-oneFrameTime = toc;
-frameRateApproximation = round(1/oneFrameTime,1);
-stop(vid);
-if abs(frameRateApproximation-frameRate) > 4    
-    errStr=sprintf('Please update frame rate: measured=%.4g , expected=%.4g',frameRateApproximation,frameRate);
-    errordlg(errStr);
-    delete(vid)
-    error(errStr); %#ok<SPERR>
-else
-    fprintf('Approximated frame rate = %.3g\n',frameRateApproximation);
-end
+% start(vid)
+% while(~vid.FramesAvailable); ; end
+% tic
+% getdata(vid, 1);
+% while(~vid.FramesAvailable); ; end
+% oneFrameTime = toc;
+% frameRateApproximation = round(1/oneFrameTime,1);
+% stop(vid);
+% if abs(frameRateApproximation-frameRate) > 4    
+%     errStr=sprintf('Please update frame rate: measured=%.4g , expected=%.4g',frameRateApproximation,frameRate);
+%     errordlg(errStr);
+%     delete(vid)
+%     error(errStr); %#ok<SPERR>
+% else
+%     fprintf('Approximated frame rate = %.3g\n',frameRateApproximation);
+% end
 %%
 % Create filename
 %from Parameters Structs
@@ -112,22 +112,6 @@ info.name = GetParamsFromFileName(recShortName);
 actualGain = GetActualGain(info);
 save([recName '\info.mat'],'-struct','info');
 
-%% Tiff Struct
-tagstruct.ImageLength = size(im,1);
-tagstruct.ImageWidth  = size(im,2);
-
-if info.nBits == 8
-    tagstruct.BitsPerSample = 8;
-elseif ismember(info.nBits,9:16)
-    tagstruct.BitsPerSample = 16;
-else
-    error(['Unsupported video format "' videoFormat '" for writing .tiffs'])
-end
-tagstruct.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
-tagstruct.Software = 'MATLAB';
-tagstruct.Photometric = Tiff.Photometric.MinIsBlack;
-tagstruct.Compression = Tiff.Compression.None;
-    
 %% Decrease Image Size
 [y,x] = find(totMaskFull) ;
 half_win = floor(windowSize/2) + 20 ;%+2;
@@ -140,10 +124,10 @@ if xLimits(1) < 1;  xLimits(1) = 1; end
 if yLimits(2) > imSize(1); yLimits(2) = imSize(1); end
 if xLimits(2) > imSize(2); xLimits(2) = imSize(2); end
           
-set(vid, 'ROIPosition', [xLimits(1) yLimits(1) (diff(xLimits)+1) (diff(yLimits)+1)])
+set(vid, 'ROIPosition', [xLimits(1)-1 yLimits(1)-1 (diff(xLimits)+1) (diff(yLimits)+1)]); %Offset starts from 0
 newPos = vid.ROIPosition;
-xLimits = newPos(1) + [0 (newPos(3)-1)];
-yLimits = newPos(2) + [0 (newPos(4)-1)];
+xLimits = newPos(1) + [1 newPos(3)];
+yLimits = newPos(2) + [1 newPos(4)];
 
 totMask = totMaskFull(yLimits(1):yLimits(2)  , xLimits(1):xLimits(2)); 
 masks{1} = totMask;
@@ -161,54 +145,78 @@ fitI_A = ones(size(totMask));
 fitI_B = zeros(size(totMask));
 fitI_A_cut = ones(size(totMask));
 fitI_B_cut = zeros(size(totMask));
+
+%% Tiff Struct
+tagstruct.ImageLength = size(darkIm,1);
+tagstruct.ImageWidth  = size(darkIm,2);
+
+% if info.nBits == 8
+    tagstruct.BitsPerSample = 8; % since the intensity is less than 256DU anyway
+% elseif ismember(info.nBits,9:16)
+%     tagstruct.BitsPerSample = 16;
+% else
+%     error(['Unsupported video format "' videoFormat '" for writing .tiffs'])
+% end
+tagstruct.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
+tagstruct.Software = 'MATLAB';
+tagstruct.Photometric = Tiff.Photometric.MinIsBlack;
+tagstruct.Compression = Tiff.Compression.None;
+    
 %% Get images Sequence from Camera
-fprintf('Recording "%s" ... \n',recName);
 if ~isvalid(vid) 
     vid = videoinput("gentl", 1, camParams.videoFormat);
-    set(vid, 'ROIPosition', [xLimits(1) yLimits(1) (diff(xLimits)+1) (diff(yLimits)+1)])
+    set(vid, 'ROIPosition', [xLimits(1)-1 yLimits(1)-1 (diff(xLimits)+1) (diff(yLimits)+1)])
     vid.FramesPerTrigger = Inf; 
     src = getselectedsource(vid);
     triggerconfig(vid, 'hardware');
     src.TriggerMode = 'On';
+    
+    if ~isequal(vid.ROIPosition, [xLimits(1) yLimits(1) (diff(xLimits)+1) (diff(yLimits)+1)])
+        error(['For some reason could not set the correct ROI Position ' num2str([xLimits(1) yLimits(1) (diff(xLimits)+1) (diff(yLimits)+1)])])
+    end
 end
-start(vid);
-ch =1;
 
 % preallocate
-if isinf(nOfFrames)
-    nAlloc = 60000;
-else
-    nAlloc = nOfFrames;
-end
-
-rawSpeckleContrast{ch}  = nan(1,nAlloc);
-corrSpeckleContrast{ch} = nan(1,nAlloc);
-meanVec{ch} = nan(1,nAlloc);
+if isinf(nOfFrames); nAlloc = 60000; else; nAlloc = nOfFrames;  end
+[rawSpeckleContrast, corrSpeckleContrast, meanVec ] = InitNaN([1,nAlloc],1);
     
-% Start aquisition
-k=1;
 % h_waitbar = waitbar(0,'Recording ...');
 ch = 1; imFig = [];
-if camParams.videoFormat(end) == '8'
-    spRec = uint8(nan(size(totMask,1),size(totMask,2),nForSP));
-else
-    spRec = uint16(nan(size(totMask,1),size(totMask,2),nForSP));
-end
+ if camParams.videoFormat(end) == '8'
+     spRec = uint8(nan(size(totMask,1),size(totMask,2),nForSP));
+ else
+     spRec = uint16(nan(size(totMask,1),size(totMask,2),nForSP));
+ end
 spSum = zeros(size(totMask));
-fig_scos = figure('Name','SCOS Graph','Units','Normalized','Position',[0.31,0.2, 0.7, 0.45]); plot(0,0)
-xlabel('time [min]');
-ylabel('K_{corr}^2')
-ax_scos = gca; 
 timeVec = (0:(nAlloc-1))'*(1/frameRate)/60 ;   % FR = FrameRate
 
+fig_scos = figure('Name','SCOS Graph','Units','Normalized','Position',[0.31,0.2, 0.7, 0.45]); 
+ax_scos=subplot(2,1,1); scos_line_h=plot(0,0); ylabel('K_{corr}^2'); xlabel('time [min]');
+ax_intn=subplot(2,1,2); intensity_line_h=plot(0,0);  ylabel('I [DU]'); xlabel('time [min]');
+set(ax_scos,'XLim',[timeVec(nForSP+1) 2]);
+set(ax_intn,'XLim',[timeVec(nForSP+1) 2] );
+
+startTime = datetime;
+save([recName '\StartTime.mat'],'startTime');
+
+fprintf('Recording "%s" ... \n',recName);
+k=1; start(vid);
 while  k<=nOfFrames
+    % get image
     while ~vid.FramesAvailable; pause(0.005); end
     im_raw = squeeze(getdata(vid, 1));
+
+    % write tiff
+    if saveTiff_flag
+        t = Tiff([recName,sprintf('\\frame_%0*d.tiff',5,k)],'w');
+        setTag(t,tagstruct);
+        write(t,uint8(im_raw));  % since the highest value is less than 255 DU      
+        close(t);
+    end
     
     %calc SCOS
     if k > nForSP
-        im = double(im_raw) - darkIm;
-        im_cut = im; %(roi.y,roi.x);
+        im_cut = double(im_raw) - darkIm;
         stdIm = stdfilt(im_cut,true(windowSize));
 
         meanFrame = mean(im_cut(masks{ch}));
@@ -219,7 +227,7 @@ while  k<=nOfFrames
             rawSpeckleContrast{ch}  = [ rawSpeckleContrast{ch} nan(1,nAlloc) ];
             corrSpeckleContrast{ch} = [ rawSpeckleContrast{ch} nan(1,nAlloc) ];
             meanVec{ch} = [ meanVec{ch} nan(1,nAlloc) ];
-            timeVec = [ timeVec (timeVec(end)+timeVec)]; 
+            timeVec = [ timeVec (timeVec(end)+timeVec)];  %#ok<AGROW>
         end
 
         rawSpeckleContrast{ch}(k) = mean((stdIm(masks{ch}).^2 ./ fittedISquare(masks{ch})));
@@ -227,13 +235,16 @@ while  k<=nOfFrames
         meanVec{ch}(k) = meanFrame;
     else
         spRec(:,:,k) = im_raw;
+        if ~isequal(im_raw,uint8(im_raw))
+            disp('Not equal')
+        end
         spSum = double(im_raw) + spSum;
     end
      
-    % calc sp noise and fitting coefficients
+    % calc sp noise 
     if k == nForSP
         stop(vid);
-        pauseStart = clock();
+        pauseStart = tic();
         
         disp('Calc SP');        
         spIm = spSum/nForSP  - darkIm;
@@ -244,7 +255,8 @@ while  k<=nOfFrames
         spVar = stdfilt( spIm ,true(windowSize)).^2;
         save([recName  '\smoothingCoefficients.mat'],'spVar','fitI_A','fitI_B','spIm','totMask');
         clear fitI_A  fitI_B fitI_A_cut fitI_B_cut
-        pauseEnd = clock();
+        pauseLen = toc(pauseStart);
+        timeVec(k+1:end) = timeVec(k+1:end) + pauseLen; 
         start(vid);
     end
     
@@ -252,16 +264,16 @@ while  k<=nOfFrames
         fprintf('<I>=%.3gDU , K_raw = %.5g , Ks=%.5g , Kr=%.5g, Ksp=%.5g, Kq=%.5g, Kf=%.5g\n',meanFrame,rawSpeckleContrast{ch}(k), ...
             mean(actualGain.*fittedI(masks{ch})./fittedISquare(masks{ch})),mean(darkVar(masks{ch})./fittedISquare(masks{ch})),...
             mean(spVar(masks{ch})./fittedISquare(masks{ch})),mean(1./(12*fittedISquare(masks{ch}))),corrSpeckleContrast{ch}(k));
-        figure(fig_scos);  plot(ax_scos,timeVec(1:k),corrSpeckleContrast{ch}(1:k)); 
+        scos_line_h.XData = timeVec(nForSP+1:k); 
+        scos_line_h.YData = corrSpeckleContrast{ch}(nForSP+1:k);
+        intensity_line_h.XData = timeVec(nForSP+1:k);  intensity_line_h.YData = meanVec{ch}(nForSP+1:k);
+        t_limits = get(ax_scos,'XLim');
+        if timeVec(k) > t_limits(2)
+            set(ax_scos,'XLim',[timeVec(nForSP+1) 2*t_limits(2)]);
+            set(ax_intn,'XLim',[timeVec(nForSP+1) 2*t_limits(2)] );
+        end
     end
     
-    % write tiff
-    if saveTiff_flag
-        t = Tiff([recName,sprintf('\\frame%0*d.tiff',3,k)],'w');
-        setTag(t,tagstruct);
-        write(t,im_raw);        
-        close(t);
-    end
     
     % print & increment k
     if mod(k,showEveryNframes)==0 
@@ -271,7 +283,7 @@ while  k<=nOfFrames
 
         if k==showEveryNframes
             [imFig , imgH ] = my_imagesc(im);
-            imFig.Position = [0 0.2, 0.3 0.3 ]
+            imFig.Position = [0 0.2, 0.3 0.3 ];
         else            
             figure(imFig);
             imgH.CData = im;        
@@ -290,12 +302,14 @@ delete(vid);
 rawSpeckleContrast{ch}(k:end) = [];
 corrSpeckleContrast{ch}(k:end) = [];
 meanVec{ch}(k:end) = [];
-
+%%
+msgbox("Turn Laser Off")
 %% Calc First nForSP frames   
 % h1 = msgbox(['Calculating first ' num2str(nForSP) ' frames...']);
 disp( ['Calculating first ' num2str(nForSP) ' frames...'] );
 for k = 1:nForSP
     im_cut = double(spRec(:,:,k)) - darkIm ;
+
     stdIm = stdfilt(im_cut,true(windowSize));
     
     meanFrame = mean(im_cut(masks{ch}));
@@ -393,6 +407,7 @@ plot(timeToPlot,rBFi);
 title(titleStr,'interpreter','none')
 xlabel(xLabelStr)
 ylabel('rBFi');
+ylim([0 10])
 grid on
 hold on;
 set(gca,'FontSize',10);
@@ -410,3 +425,5 @@ timingFile = fullfile(fileparts(recName),'timing.txt');
 if exist(timingFile,'file')    
     markTiming(timingFile)
 end
+
+% close(f

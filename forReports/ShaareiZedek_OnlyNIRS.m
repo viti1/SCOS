@@ -1,27 +1,45 @@
 %% Init
-mFolder = fileparts(mfilename('fullpath'));
+recordsFolder = 'D:\Vika\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek';
+nirsFolder = [recordsFolder '\NIRS Data']; 
+NIRSrecordsDir = [ dir([ nirsFolder '\A*.csv']); dir([ nirsFolder '\B*.csv']) ];
+% recordsnames = cellfun(@(x) startsWith(x,{''}),{recordsDir.name});
+% NIRSrecordsnames = {NIRSrecordsDir( cellfun(@(x) contains(x,'2025.01.12'),{NIRSrecordsDir.name}) ).name };
+NIRSrecordsnames = {recordsDir.name};
 
-recordsFolder = ['C:\Users\' getenv('username') '\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek\NIRS Data']; 
-recordsDir = [ dir([ recordsFolder '\A*.csv']); dir([ recordsFolder '\B*.csv']) ];
-records = strcat(recordsFolder, filesep , {recordsDir.name})';
+NIRSrecords = strcat(nirsFolder, filesep , NIRSrecordsnames)'; 
+figureDir = fullfile(nirsFolder,'figs');
 
-figureDir = fullfile(recordsFolder,'figs');
+SCOSrecordsDir = [ dir([ recordsFolder '\A*']); dir([ recordsFolder '\B*']) ];
+
+recNames = cell(size(NIRSrecords));
+timingFiles = cell(size(NIRSrecords));
+for k=1:numel(NIRSrecordsnames)
+    tmp = strsplit(NIRSrecordsnames{k});
+    recNames{k} = tmp{1};    
+    idx=find(cellfun(@(x) startsWith(x,[recNames{k} ' ']),{SCOSrecordsDir.name}));
+    if isempty(idx)
+        error(['Could not find ' recNames{k} ' SCOS matching folder']);
+    end
+    timing_file_tmp = dir([recordsFolder filesep SCOSrecordsDir(idx).name filesep '*timing*.txt'] );
+    if isempty(timing_file_tmp)
+        error([ recNames{k} '  : Could not find timing file']);
+    end
+    timingFiles{k} = fullfile(recordsFolder, SCOSrecordsDir(idx).name, timing_file_tmp.name);
+end
 
 %% Create Figures
 prefix = '\figs\';
-figs = nan(size(numel(records)));
-for ri = 1:numel(records)
+figs = nan(size(numel(NIRSrecords)));
+for ri = 1:numel(NIRSrecords)
     %%
-    [~,recName ]  = fileparts(records{ri});
+    [~,recName ]  = fileparts(NIRSrecords{ri});
     participantID = recName(1:2);
-
-    timingFile = [records{ri}(1:end-4) ' timing info.txt'];
-    
-    Timing = readtable(timingFile);
+    disp(participantID)
+    Timing = readtable(timingFiles{ri});
     startTime = Timing.Time{1};
     
-    NIRS = readtable(records{ri});
-    NIRS = renamevars(NIRS,2:7,{'Date','Time','Left','Right','SedlineEvents','Remarks'});
+    NIRS = readtable(NIRSrecords{ri});
+    NIRS = renamevars(NIRS,2:5,{'Date','Time','Left','Right'});
     if ~isnumeric(NIRS.Left)
         NIRS.Left  = str2double(NIRS.Left);        
     end
@@ -35,7 +53,7 @@ for ri = 1:numel(records)
     colors = {[1 0 0.8],[0.6 0 0.1]}; % red
     h(1) = plot(NIRStimeVec,NIRS.Left,'color',colors{1},'DisplayName','Left'); hold on;
     h(2) = plot(NIRStimeVec,NIRS.Right,'color',colors{2},'DisplayName','Right'); hold on;
-    markTiming(timingFile);
+    markTiming(timingFiles{ri});
     legend(h); % TBD check which is left and which is right
     xlabel('[min]');
     ylabel('rSO2 % ');

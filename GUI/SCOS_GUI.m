@@ -67,7 +67,7 @@ end
 handles.tgl_startVideo.UserData.saveEachNframes = 200;
 
 
-handles.fig_SCOS_GUI.UserData.CamData.videoFormat = 'Mono10';
+handles.fig_SCOS_GUI.UserData.CamData.videoFormat = 'Mono12';
 handles.fig_SCOS_GUI.UserData.CamData.triggerSource = 'Line2'; % TBD !!
 % switch  handles.fig_SCOS_GUI.UserData.CamData.videoFormat
     handles.fig_SCOS_GUI.UserData.CamData.maxGain = 24;
@@ -241,8 +241,8 @@ if isnan(GainNum)
     return;
 elseif GainNum < 0 || GainNum > handles.fig_SCOS_GUI.UserData.CamData.maxGain
     hObject.String = hObject.Value;
-    errordlg(['Gain should be in the range [0' handles.fig_SCOS_GUI.UserData.CamData.maxGain '] dB'])
-    return;
+    errordlg(['Gain should be in the range [0' num2str(handles.fig_SCOS_GUI.UserData.CamData.maxGain) '] dB'])
+    return;d
 end
 
 if ~isvalid(handles.tgl_startVideo.UserData.src)
