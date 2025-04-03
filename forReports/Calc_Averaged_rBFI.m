@@ -54,14 +54,14 @@ end
 if contains(recName,'Hand','IgnoreCase',true)
     taskName = 'FingerGrip'; 
     titleTaskName = 'Fingers Grip Task'; 
-    taskStart = 1*60; % 1sec
-    taskDuration   = 2*60; % 3 sec
+    taskStart = 1*60; % 1min
+    taskDuration   = 2*60; % 
     taskColor = [1 0.65 0];
 elseif contains(recName,'Verbal','IgnoreCase',true)
     taskName = 'Verbal'; 
     titleTaskName = 'Verbal Task';
-%     taskDuration   = 40; %  0.5 minute
-%     taskStart = 50 + 90*[0:3]; % each minut
+%     taskDuration   = 40;
+%     taskStart = 50 + 90*[0:3]; 
 
     taskDuration   = 30; %  0.5 minute
     taskStart = 30 + 60*[0:4]; % each minut

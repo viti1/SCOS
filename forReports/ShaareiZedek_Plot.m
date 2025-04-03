@@ -1,12 +1,34 @@
 clear
+participantID = 'A6';
 
-recName = ['C:\Users\' getenv('username') '\OneDrive - Bar-Ilan University - Students\PhD Research\SCOS\Records\ShaareiZedek__\C4'];
-% recName = 'C:\Users\tarlevi\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek\B3 21.07.2024';
-[recordsFolder , recRawName ]= fileparts(recName);
-participantID = recRawName(1:2);
+recordsFolder = 'D:\Vika\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek';
+nirsFolder = [recordsFolder '\NIRS Data']; 
+NIRSrecordsDir = [ dir([ nirsFolder '\A*.csv']); dir([ nirsFolder '\B*.csv']) ];
+NIRSrecordsnames = {NIRSrecordsDir.name};
+NIRSrecords = strcat(nirsFolder, filesep , NIRSrecordsnames)'; 
+figureDir = fullfile(nirsFolder,'figs');
+
+SCOSrecordsDir = [ dir([ recordsFolder '\A*']); dir([ recordsFolder '\B*']) ];
+recNames = cell(size(NIRSrecords));
+timingFiles = cell(size(NIRSrecords));
+for k=1:numel(NIRSrecordsnames)
+    tmp = strsplit(NIRSrecordsnames{k});
+    recNames{k} = tmp{1};    
+    idx=find(cellfun(@(x) startsWith(x,[recNames{k} ' ']),{SCOSrecordsDir.name}));
+    if isempty(idx)
+        error(['Could not find ' recNames{k} ' SCOS matching folder']);
+    end
+    timing_file_tmp = dir([recordsFolder filesep SCOSrecordsDir(idx).name filesep '*timing*.txt'] );
+    if isempty(timing_file_tmp)
+        error([ recNames{k} '  : Could not find timing file']);
+    end
+    timingFiles{k} = fullfile(recordsFolder, SCOSrecordsDir(idx).name, timing_file_tmp.name);
+    scosFiles{k} = 
+end
 
 %% Timing
-timingFileDir = dir([recName '\' participantID '*timing info.txt']); 
+timingFiles = cell(size(NIRSrecords));
+
 if isempty(timingFileDir)
     timingFileDir = dir([recordsFolder '\NIRS Data\' participantID '*timing info.txt']); 
     if isempty(timingFileDir)

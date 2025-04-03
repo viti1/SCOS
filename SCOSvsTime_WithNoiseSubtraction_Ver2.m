@@ -1,5 +1,5 @@
 %  ---------------------------------------------------------------------------------------------------------
-%  [ timeVec,  , rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = PlotSCOSvsTime(recordName,windowSize,plotFlag,maskInput)
+%  [ timeVec,  , rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = PlotSCOSvsTime(recName,windowSize,plotFlag,maskInput)
 %  GUI mode:   - Choose the recording folder
 %              - Choose widow size ( it will be used in stdfilter() function in order to calc the local std)
 %              - Choose dark recording folder
@@ -16,15 +16,15 @@
 %                If the dark recording is located in the same folder as the Main one, and starts with "background"
 %                it is automatically recognized.
 %
-%  Command Mode: Same as GUI mode , but recordName and windowSize variables must be specified. 
+%  Command Mode: Same as GUI mode , but recName and windowSize variables must be specified. 
 %                plotFlag - [optional] defualt= true                
 %                maskInput - can be "true" (then all the image is taken as mask) or
 %                a boolaen map the same size as the record.
 %  ---------------------------------------------------------------------------------------------------------
 
 function  [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , info] = ...
-    SCOSvsTime_WithNoiseSubtraction_Ver2(recordName,backgroundName,windowSize,plotFlag,maskInput)
-if nargin <3
+    SCOSvsTime_WithNoiseSubtraction_Ver2(recName,backgroundName,windowSize,plotFlag,maskInput)
+if nargin < 4
     plotFlag = true;
 end
 addpath('.\baseFunc')
@@ -37,25 +37,25 @@ if nargin == 0 % GUI mode
     if exist('.\lastRec.mat','file')
         lastF = load('.\lastRec.mat');        
     else
-        lastF.recordName = [ fileparts(pwd) '\Records' ];
+        lastF.recName = [ fileparts(pwd) '\Records' ];
     end
     
-    [recordName] = uigetdir(fileparts(lastF.recordName));
-    if recordName == 0; return; end % if 'Cancel' was pressed
-    if numel(dir([recordName, '\*.avi' ])) > 1 
-        [recordRawName, recordDir] = uigetfile([recordName '\*.avi']);
+    [recName] = uigetdir(fileparts(lastF.recName));
+    if recName == 0; return; end % if 'Cancel' was pressed
+    if numel(dir([recName, '\*.avi' ])) > 1 
+        [recordRawName, recordDir] = uigetfile([recName '\*.avi']);
         if recordRawName == 0; return; end % if 'Cancel' was pressed
-        recordName = fullfile(recordDir, recordRawName);
-    elseif ( numel(dir([recordName, '\*.avi' ])) + numel(dir([recordName, '\*.tiff' ])) + numel(dir([recordName, '\*.tif' ])) +  numel(dir([recordName, '\*.mat' ])) ) < 1 
-        errordlg(['No .avi or .tiff/.tif or .mat files found in ' recordName ])
-        error(['No .avi or .tiff/.tif or .mat files found in ' recordName ]);
-    elseif numel(dir([recordName, '\*.avi' ])) == 1 && ( numel(dir([recordName, '\*.tiff' ])) + numel(dir([recordName, '\*.tif' ])) ) > 1 
+        recName = fullfile(recordDir, recordRawName);
+    elseif ( numel(dir([recName, '\*.avi' ])) + numel(dir([recName, '\*.tiff' ])) + numel(dir([recName, '\*.tif' ])) +  numel(dir([recName, '\*.mat' ])) ) < 1 
+        errordlg(['No .avi or .tiff/.tif or .mat files found in ' recName ])
+        error(['No .avi or .tiff/.tif or .mat files found in ' recName ]);
+    elseif numel(dir([recName, '\*.avi' ])) == 1 && ( numel(dir([recName, '\*.tiff' ])) + numel(dir([recName, '\*.tif' ])) ) > 1 
         % if in folder apear both .avi and .tiff files -> assume that .avi is the recording
-        d = dir([recordName, '\*.avi' ]);
-        recordName = fullfile( recordName , d(1).name );
+        d = dir([recName, '\*.avi' ]);
+        recName = fullfile( recName , d(1).name );
     end
     
-    save('.\lastRec.mat','recordName')
+    save('.\lastRec.mat','recName')
     
     maxWindowSize = 50; minWindowSize = 3;
     answer = inputdlg('Window Size','',[1 25],{'7'});
@@ -67,21 +67,21 @@ if nargin == 0 % GUI mode
     clear answer
 end
 
-isRecordFile = exist(recordName,'file') == 2;
+isRecordFile = exist(recName,'file') == 2;
 if nargin == 0  || isempty(backgroundName)
-    if exist([recordName , '_dark'],'dir')
-        backgroundName = [recordName , '_dark'];
+    if exist([recName , '_dark'],'dir')
+        backgroundName = [recName , '_dark'];
     else
-        dir_Background = [ dir([fileparts(recordName) , '\DarkIm*']) dir([fileparts(recordName) , '\background*']) dir([fileparts(recordName) , '\BG_*'])   ] ;
+        dir_Background = [ dir([fileparts(recName) , '\DarkIm*']) dir([fileparts(recName) , '\background*']) dir([fileparts(recName) , '\BG_*'])   ] ;
     
         if  isempty(dir_Background) || numel(dir_Background) > 1 
             if isRecordFile
-                backgroundName = uigetfile( fileparts(recordName) ,'Please Select the background');
+                backgroundName = uigetfile( fileparts(recName) ,'Please Select the background');
             else
-                backgroundName = uigetdir( fileparts(recordName) ,'Please Select the background'); 
+                backgroundName = uigetdir( fileparts(recName) ,'Please Select the background'); 
             end
         else
-            backgroundName = fullfile(fileparts(recordName),dir_Background(1).name);
+            backgroundName = fullfile(fileparts(recName),dir_Background(1).name);
         end
         if isequal(backgroundName,0)
             disp('Aborting...')
@@ -91,16 +91,16 @@ if nargin == 0  || isempty(backgroundName)
 end
 
 %% Create Mask
-upFolders = strsplit(recordName,filesep);
+upFolders = strsplit(recName,filesep);
 rawName = strrep( strjoin(upFolders(end-2:end),'; '), '_',' ');
 
-if exist(recordName,'file') == 7 % it's a folder
-    recSavePrefix = [ recordName filesep ];
+if exist(recName,'file') == 7 % it's a folder
+    recSavePrefix = [ recName filesep ];
 else % it's a file
-    recSavePrefix = [ recordName(1:find(recordName=='.',1,'last')-1) '_' ];
+    recSavePrefix = [ recName(1:find(recName=='.',1,'last')-1) '_' ];
 end
 
-[ mean_frame ] = mean( ReadRecord(recordName,20),3); 
+[ mean_frame ] = mean( ReadRecord(recName,20),3); 
 
 maskFile = [recSavePrefix 'Mask.mat'];
 if exist('maskInput','var')
@@ -148,14 +148,14 @@ end
 ws2 = ceil(windowSize/2); % for margins marking as false  
 if ~exist('masks','var')
     if ~loadExistingFile_flag
-        % [channels, masks, totMask, figIm] = CreateMask(recordName);
-        [ totMask , circ , figMask] = GetROI(mean(ReadRecord(recordName,20),3),windowSize);
+        % [channels, masks, totMask, figIm] = CreateMask(recName);
+        [ totMask , circ , figMask] = GetROI(mean(ReadRecord(recName,20),3),windowSize);
                 
         masks{1} = totMask;       
         channels.Centers = circ.Center;
         channels.Radii = circ.Radius;
         save(maskFile,'masks','channels','totMask');
-        savefig(figMask,[recordName '\maskIm.fig'])
+        savefig(figMask,[recName '\maskIm.fig'])
         % close(figIm)
     else 
         M = load(maskFile);
@@ -185,12 +185,12 @@ else
 end
 
 %% Check info
-upFolders = strsplit(recordName,filesep);
+upFolders = strsplit(recName,filesep);
 shortRecName = strjoin(upFolders(end-2:end));
 
-nOfFrames = GetNumOfFrames(recordName);
-info = GetRecordInfo(recordName);
-im1 = ReadRecord(recordName,1);
+nOfFrames = GetNumOfFrames(recName);
+info = GetRecordInfo(recName);
+im1 = ReadRecord(recName,1);
 
 if backgroundName~=0
     info_background = GetRecordInfo(backgroundName);
@@ -201,7 +201,6 @@ if backgroundName~=0
             error('Background.%s=%g   Record.%s=%g',param, info_background.name.(param), param, info_background.name.(param));
         end
     end
-
 end
 
 if isfield(info,'cam') && isfield(info.cam,'AcquisitionFrameRate')
@@ -247,12 +246,25 @@ if exist(backgroundName,'file') == 7 % it's a folder
         end
         [ background , darkVar ] = ReadRecordVarAndMean( backgroundName );
         background =  background - info_background.name.BL;
-
+        
         if abs(mean2(background)) > 3
             my_imagesc(background); title('Background');
             warning('Suspicious level of the background %gDU !', round(mean2(background),2));
         end        
-    end    
+    end  
+    if ~isequal(size(mean_frame),size(background))
+        if exist([recName '\ROI.mat'],'file')
+            ROI = load([recName '\ROI.mat']);
+            if ( ROI.xLimits(end) > size(background,2) || ROI.xLimits(end)>size(background,2) )
+                error(['ROI.xLimits = ' num2str(ROI.xLimits) ' ROI.yLimits = ' num2str(ROI.yLimits) ' darkIm size = [' num2str(size(background)) ']'])
+            else
+                background  = background(ROI.yLimits(1):ROI.yLimits(2),ROI.xLimits(1):ROI.xLimits(2));
+                darkVar     = darkVar(ROI.yLimits(1):ROI.yLimits(2),ROI.xLimits(1):ROI.xLimits(2));
+            end
+        else
+            error(['Background size is ' num2str(size(background)) ' but record size is ' num2str(size(mean_frame))]);
+        end
+    end
 elseif endsWith(backgroundName,'.mat')
     bgS = load( backgroundName );
     fields = fieldnames(bgS);
@@ -288,19 +300,19 @@ else
 end
 
 if isRecordFile
-    smoothCoeffFile = [fileparts(recordName)  '\smoothingCoefficients.mat'];
+    smoothCoeffFile = [fileparts(recName)  '\smoothingCoefficients.mat'];
 else
-    smoothCoeffFile = [recordName  '\smoothingCoefficients.mat'];
+    smoothCoeffFile = [recName  '\smoothingCoefficients.mat'];
 end
 if ~exist(smoothCoeffFile,'file') 
     % TBD check if it was calculated with the same mask & window size
     disp('Calc Spatial Noise and Smoothing Coefficients');
     numFramesForSPNoise = 400;
     if nOfFrames > 500 ;  numFramesForSPNoise=500; end
-    spRec = ReadRecord(recordName,numFramesForSPNoise) - BlackLevel;
+    spRec = ReadRecord(recName,numFramesForSPNoise) - BlackLevel;
     spIm = mean(spRec,3) - background;
     fig_spIm = my_imagesc(spIm); title(['Image average ' num2str(numFramesForSPNoise) ' frames'] );
-    savefig(fig_spIm, [recordName '\spIm.fig']);
+    savefig(fig_spIm, [recName '\spIm.fig']);
     spVar = stdfilt( spIm ,true(windowSize)).^2;
     [fitI_A,fitI_B] = FitMeanIm(spRec,totMask,windowSize);
     clear spRec
@@ -338,18 +350,21 @@ fitI_A_cut =  fitI_A(roi.y  , roi.x);
 fitI_B_cut =  fitI_B(roi.y  , roi.x);
 % bpMap_cut = bpMap(roi.y  , roi.x);
 %% Calc Specle Contrast
-disp(['Calculating SCOS on "' recordName '" ... ']);
+disp(['Calculating SCOS on "' recName '" ... ']);
 disp(['Mono' num2str(nOfBits)]);
 nOfChannels = numel(masks);
-frameNames = dir([recordName '\*.tiff']);
+frameNames = dir([recName '\*.tiff']);
+[~,sort_ind] = sort([frameNames.datenum]);
+frameNames = frameNames(sort_ind);
 % init loop vars
 [ rawSpeckleContrast , corrSpeckleContrast , meanVec] =InitNaN([nOfFrames 1],nOfChannels);
+timeVecFile = nan([nOfFrames 1]);
 
 if isRecordFile
-    rec = ReadRecord(recordName);
+    rec = ReadRecord(recName);
     im1 = double(rec(:,:,1));
 else
-	im1 = double(imread([recordName,filesep,frameNames(1).name])) ;
+	im1 = double(imread([recName,filesep,frameNames(1).name])) ;
 end
 
 devide_by = 1;
@@ -376,10 +391,11 @@ for i=1:nOfFrames
     if isRecordFile 
         im_raw = double(rec(:,:,i));
     else
-        im_raw = double(imread([recordName,filesep,frameNames(i).name])) / devide_by ;               
+        im_raw = double(imread([recName,filesep,frameNames(i).name])) / devide_by ;               
         im_raw = im_raw - BlackLevel;
     end
-    
+    timeVecFile(i) = frameNames(i).datenum;
+
     im = im_raw - background;
     im_cut = im(roi.y,roi.x);
     stdIm = stdfilt(im_cut,true(windowSize));
@@ -400,7 +416,7 @@ for i=1:nOfFrames
                mean(actualGain.*fittedI(masks_cut{ch})./fittedISquare(masks_cut{ch})),mean(darkVar(masks_cut{ch})./fittedISquare(masks_cut{ch})),...
                mean(spVar(masks_cut{ch})./fittedISquare(masks_cut{ch})),mean(1./(12*fittedISquare(masks_cut{ch}))),corrSpeckleContrast{ch}(i));
         end
-    end 
+    end
 end
 fprintf('\n');
 %% Create Time vector
@@ -409,9 +425,10 @@ p2p_time = timeVec<timePeriodForP2P;
 %% Save
 stdStr = sprintf('Std%dx%d',windowSize,windowSize);
 if exist([recSavePrefix 'Local' stdStr '.mat'],'file'); delete([recSavePrefix 'Local' stdStr '.mat']); end % just for it to have the right date
-firstFrameDir = dir([recordName,'\*_0001.tiff']);
-startDateTime = firstFrameDir.date;
-save([recSavePrefix 'Local' stdStr '_corr.mat'],'startDateTime','timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recordName','windowSize');
+firstFrameDir = dir([recName,'\*0001.tiff']);
+[~,min_ind] = min([firstFrameDir.datenum]);
+startDateTime = firstFrameDir(min_ind).date;
+save([recSavePrefix 'Local' stdStr '_corr.mat'],'startDateTime','timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recName','windowSize','timeVecFile','frameNames');
 
 %% Plot
 infoFields = fieldnames(info.name);
@@ -432,7 +449,7 @@ end
 [corr_SNR,  corr_FFT , corr_freq, corr_pulseFreq, corr_pulseBPM] = CalcSNR_Pulse(corrSpeckleContrast{1},frameRate);
 
 if  plotFlag
-    fig = figure('name',['SCOS ' recordName ' Mono' num2str(nOfBits)],'Units','Normalized','Position',[0.1 0.1 0.8 0.8]);
+    fig = figure('name',['SCOS ' recName ' Mono' num2str(nOfBits)],'Units','Normalized','Position',[0.1 0.1 0.8 0.8]);
     subplot(3,2,1);
         plot(timeVec,corrSpeckleContrast{1})
         ylabel('Corrected Contrast (var/I^2)')
@@ -470,26 +487,29 @@ if any(corrSpeckleContrast{1} < 0 )
 end
 
 if plotFlag
+    BFi = 1./corrSpeckleContrast{1};
     if timeVec(end) > 120
         timeToPlot = timeVec / 60; % convert to min
         xLabelStr = 'time [min]';
+        rBFi = BFi/mean(BFi(1:round(10*frameRate))); % normalize by first 10 seconds        
     else
         timeToPlot = timeVec ; % convert to min
         xLabelStr = 'time [sec]';
-    end
-
-    fig7 = figure('Name',['rBFi: '  recordName ],'Units','Normalized','Position',[0.1,0.1,0.4,0.4]); 
+        rBFi = BFi/prctile(BFi(1:round(10*frameRate)),5); % normalize by 5% percentile in first 10 sec
+    end   
+    
+    fig7 = figure('Name',['rBFi: '  recName ],'Units','Normalized','Position',[0.1,0.1,0.4,0.4]);
     subplot(2,1,1);
-    BFi = 1./corrSpeckleContrast{1};
-    % rBFi = BFi/prctile(BFi(1:round(10*frameRate)),5); % normalize by 5% percentile in first 10 sec
-    rBFi = BFi/mean(BFi(1:round(1*frameRate))); % normalize by first second
-    plot(timeToPlot,rBFi); 
+    plot(timeToPlot,rBFi);
     title(titleStr)
     xlabel(xLabelStr)
-    ylabel('rBFi');
+    ylabel('rBFi');  
     grid on
     hold on;
     set(gca,'FontSize',10);
+%     title('CBF')
+    ylim([0 min(10,max(rBFi))])
+    
     subplot(2,1,2)
     plot(timeToPlot,meanVec{1}); 
     xlabel(xLabelStr)
@@ -498,7 +518,24 @@ if plotFlag
     grid on
     % tLim=10; subplot(2,1,1); xlim([0 tLim]); subplot(2,1,2); xlim([0 tLim])
     savefig(fig7,[recSavePrefix '_rBFi.fig']);
+    set(gca,'FontSize',14);
+    title('Intensity')
+    
+    timingFile = [ fileparts(recName) '\timing.txt'];
+    if exist(timingFile,'file')
+        if exist([recName '\StartTime.mat'],'file')
+            s = load([recName '\StartTime.mat']);
+            startTime = s.startTime;
+        else
+            startTime = getSCOSstartTime(recName);
+        end
+        for plt_i = 1:2
+            subplot(2,1,plt_i);
+            markTiming(timingFile,startTime);
+        end
+    end
 end
+
 %%
 toc(start_scos)
 end
