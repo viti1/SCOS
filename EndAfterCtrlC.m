@@ -31,7 +31,7 @@ nOfFrames = numel(rawSpeckleContrast{1});
 timeVec = (0:(nOfFrames-1))'*(1/frameRate) ;   % FR = FrameRate
 
 %% Save
-saveName = [recName '\Local' stdStr '_corr.mat'];
+saveName = [recName '\Local' stdStr '_corr_realtime.mat'];
 if exist(saveName,'file'); delete(saveName); end % just for it to have the right date
 nOfChannels = 1;
 save(saveName,'timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recName','windowSize');
@@ -88,7 +88,7 @@ titleStr =  [ infoFields{1} firtsParamValue SDSstr '; exp=' num2str(info.name.ex
         xlabel('Time [s]')
     end
 
-    savefig(fig,[recName '\Local' stdStr '_plot.fig']);
+    savefig(fig,[recName '\Local' stdStr '_plot_realtime.fig']);
 
 
 % Plot rBFI
@@ -111,6 +111,7 @@ plot(timeToPlot,rBFi);
 title(titleStr,'interpreter','none')
 xlabel(xLabelStr)
 ylabel('rBFi');
+ylim([0 10])
 grid on
 hold on;
 set(gca,'FontSize',10);
@@ -120,11 +121,15 @@ xlabel(xLabelStr)
 ylabel('<I> [DU]');
 set(gca,'FontSize',10);
 grid on
-% tLim=10; subplot(2,1,1); xlim([0 tLim]); subplot(2,1,2); xlim([0 tLim])
-savefig(fig8,[recName '\_rBFi.fig']);
-savefig(fig8,[fileparts(recName) '\_rBFi.fig']);
 
-timingFile = fullfile(fileparts(recName),'timing.txt'); 
-if exist(timingFile,'file')    
-    markTiming(timingFile)
+timingFileDir = dir([ fileparts(recName),'\*timing*.txt' ]);
+if numel(timingFileDir)==1  
+    markTiming([fileparts(recName) '\' timingFileDir.name])
+elseif numel(timingFileDir)>1
+    warning('More that one timing file was found: ')
+    disp({timingFileDir.name}')
 end
+
+% tLim=10; subplot(2,1,1); xlim([0 tLim]); subplot(2,1,2); xlim([0 tLim])
+savefig(fig8,[recName '\_rBFi_realtime.fig']);
+savefig(fig8,[fileparts(recName) '\rBFi_realtime.fig']);
