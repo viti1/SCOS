@@ -3,3 +3,4 @@
      stop( objects(k) );
      delete(objects(k)); 
    end
+msgbox("Turn off Laser");

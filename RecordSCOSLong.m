@@ -8,18 +8,19 @@ if exist('.\lastRec.mat','file')
 else
     lastF.recName = [ fileparts(pwd) '\Records' ];
 end
-folder = 'C:\SCOS\Records\Tests\T4_Vika_5mmPrism_black_prob_white_triangle_2p5SDS_10min_expT10ms_Mono12';
+% folder = 'C:\SCOS\Records\Tests\T7_MArina_2903_straight_probe_vika_multicore400um_expT8ms_Mono12';
 % folder = uigetdir(['C:\Users\' getenv('USERNAME') '\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek\12.01.2025'],'Where to Save?');
+folder = uigetdir('C:\SCOS\Records\ShaareiZedek_30_03')
 if folder==0 ; return; end
 if ~exist(folder,'dir'); mkdir(folder); end
 lastF.recordName = folder;
 save('.\lastRec.mat','-struct','lastF')
-nOfFrames = 600*2;
+nOfFrames = Inf; %600*2;
 nOfDarkFrames = 600;
 nForSP = 600;
 windowSize = 9;
 frameRate = 1/100e-3; % Hz 
-camParams.ExposureTime = 10000;
+camParams.ExposureTime = 8000;
 camParams.Gain = 8;  % use 8dB for 12bit
 camParams.videoFormat = 'Mono12';
 camParams.BlackLevel = 30;
@@ -30,7 +31,7 @@ camParams.addToFilename.videoFormat = false;
 
 setupParams.Laser = 'iBeam';
 setupParams.LaserPower = 120; %mW
-setupParams.Fiber = '90 deg 400um';
+% setupParams.Fiber = '90 deg 400um';
 setupParams.SDS = 2.5;
 
 saveTiff_flag = true;
@@ -62,22 +63,23 @@ src = getselectedsource(vid);
 triggerconfig(vid, 'hardware');
 src.TriggerMode = 'On';
 
-% start(vid)
-% while(~vid.FramesAvailable); ; end
-% tic
-% getdata(vid, 1);
-% while(~vid.FramesAvailable); ; end
-% oneFrameTime = toc;
-% frameRateApproximation = round(1/oneFrameTime,1);
-% stop(vid);
-% if abs(frameRateApproximation-frameRate) > 4    
-%     errStr=sprintf('Please update frame rate: measured=%.4g , expected=%.4g',frameRateApproximation,frameRate);
-%     errordlg(errStr);
-%     delete(vid)
-%     error(errStr); %#ok<SPERR>
-% else
-%     fprintf('Approximated frame rate = %.3g\n',frameRateApproximation);
-% end
+%% Check Frame Rate
+start(vid)
+while(~vid.FramesAvailable); ; end
+tic
+getdata(vid, 1);
+while(~vid.FramesAvailable); ; end
+oneFrameTime = toc;
+frameRateApproximation = round(1/oneFrameTime,1);
+stop(vid);
+if abs(frameRateApproximation-frameRate) > 12    
+    errStr=sprintf('Please update frame rate: measured=%.4g , expected=%.4g',frameRateApproximation,frameRate);
+    errordlg(errStr);
+    delete(vid)
+    error(errStr); %#ok<SPERR>
+else
+    fprintf('Approximated frame rate = %.3g\n',frameRateApproximation);
+end
 %%
 % Create filename
 %from Parameters Structs
@@ -92,7 +94,14 @@ imagesBuff = getdata(vid, vid.FramesAvailable);
 im = mean(squeeze(imagesBuff),3) - camParams.BlackLevel;
 stop(vid);
 %
-[totMaskFull, circ, figMask] = GetROI(im,windowSize);
+answer = 'no';
+while ~strcmpi(answer,'Yes')
+    [totMaskFull, circ, figMask] = GetROI(im,windowSize);
+    answer = questdlg('Mask OK?','','Yes','No','Yes');
+    if strcmpi(answer,'No')
+        close(figMask);
+    end
+end
 meanI = round(mean(im(totMaskFull)));
 pcntl = prctile(im(totMaskFull),[5 95]);
 h2 = msgbox([ '<I>=' num2str(meanI,4) 'DU;   5%I=' num2str(pcntl(1),4) 'DU;   95%I=' num2str(pcntl(2),4) 'DU  '   ])
@@ -192,6 +201,8 @@ timeVec = (0:(nAlloc-1))'*(1/frameRate)/60 ;   % FR = FrameRate
 
 fig_scos = figure('Name','SCOS Graph','Units','Normalized','Position',[0.31,0.2, 0.7, 0.45]); 
 ax_scos=subplot(2,1,1); scos_line_h=plot(0,0); ylabel('K_{corr}^2'); xlabel('time [min]');
+grid on; 
+grid minor;
 ax_intn=subplot(2,1,2); intensity_line_h=plot(0,0);  ylabel('I [DU]'); xlabel('time [min]');
 set(ax_scos,'XLim',[timeVec(nForSP+1) 2]);
 set(ax_intn,'XLim',[timeVec(nForSP+1) 2] );
@@ -253,7 +264,7 @@ while  k<=nOfFrames
 %         imgH = findobj(imAx, 'Type', 'image');
 %         savefig(fig_spIm, [recName '\spIm.fig']);
         spVar = stdfilt( spIm ,true(windowSize)).^2;
-        save([recName  '\smoothingCoefficients.mat'],'spVar','fitI_A','fitI_B','spIm','totMask');
+        save([recName  '\spVar.mat'],'spVar','fitI_A','fitI_B','spIm','totMask');
         clear fitI_A  fitI_B fitI_A_cut fitI_B_cut
         pauseLen = toc(pauseStart);
         timeVec(k+1:end) = timeVec(k+1:end) + pauseLen; 
@@ -329,7 +340,7 @@ nOfFrames = numel(rawSpeckleContrast{1});
 timeVec = (0:(nOfFrames-1))'*(1/frameRate) ;   % FR = FrameRate
 
 %% Save
-saveName = [recName '\Local' stdStr '_corr.mat'];
+saveName = [recName '\Local' stdStr '_corr_realtime.mat'];
 if exist(saveName,'file'); delete(saveName); end % just for it to have the right date
 nOfChannels = 1;
 save(saveName,'timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recName','windowSize');
@@ -386,7 +397,7 @@ titleStr =  [ infoFields{1} firtsParamValue SDSstr '; exp=' num2str(info.name.ex
         xlabel('Time [s]')
     end
 
-    savefig(fig,[recName '\Local' stdStr '_plot.fig']);
+    savefig(fig,[recName '\Local' stdStr '_plot_realtime.fig']);
 % Plot rBFI
 %% Calc rBFi
 BFi = 1./corrSpeckleContrast{1};
@@ -418,12 +429,12 @@ ylabel('<I> [DU]');
 set(gca,'FontSize',10);
 grid on
 % tLim=10; subplot(2,1,1); xlim([0 tLim]); subplot(2,1,2); xlim([0 tLim])
-savefig(fig8,[recName '\_rBFi.fig']);
-savefig(fig8,[fileparts(recName) '\_rBFi.fig']);
+
 
 timingFile = fullfile(fileparts(recName),'timing.txt'); 
 if exist(timingFile,'file')    
     markTiming(timingFile)
 end
 
-% close(f
+savefig(fig8,[recName '\_rBFi_realtime.fig']);
+savefig(fig8,[fileparts(recName) '\rBFi_realtime.fig']);

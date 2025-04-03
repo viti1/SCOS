@@ -307,8 +307,8 @@ end
 if ~exist(smoothCoeffFile,'file') 
     % TBD check if it was calculated with the same mask & window size
     disp('Calc Spatial Noise and Smoothing Coefficients');
-    numFramesForSPNoise = 400;
-    if nOfFrames > 500 ;  numFramesForSPNoise=500; end
+    numFramesForSPNoise = 600;
+    if nOfFrames > 1000 ;  numFramesForSPNoise=1000; end
     spRec = ReadRecord(recName,numFramesForSPNoise) - BlackLevel;
     spIm = mean(spRec,3) - background;
     fig_spIm = my_imagesc(spIm); title(['Image average ' num2str(numFramesForSPNoise) ' frames'] );
@@ -425,7 +425,7 @@ p2p_time = timeVec<timePeriodForP2P;
 %% Save
 stdStr = sprintf('Std%dx%d',windowSize,windowSize);
 if exist([recSavePrefix 'Local' stdStr '.mat'],'file'); delete([recSavePrefix 'Local' stdStr '.mat']); end % just for it to have the right date
-firstFrameDir = dir([recName,'\*0001.tiff']);
+firstFrameDir = dir([recName,'\*.tiff']);
 [~,min_ind] = min([firstFrameDir.datenum]);
 startDateTime = firstFrameDir(min_ind).date;
 save([recSavePrefix 'Local' stdStr '_corr.mat'],'startDateTime','timeVec', 'corrSpeckleContrast' , 'rawSpeckleContrast', 'meanVec', 'info','nOfChannels', 'recName','windowSize','timeVecFile','frameNames');
