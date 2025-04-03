@@ -45,7 +45,7 @@ if nargin == 0 % GUI mode
     if numel(dir([recName, '\*.avi' ])) > 1 
         [recordRawName, recordDir] = uigetfile([recName '\*.avi']);
         if recordRawName == 0; return; end % if 'Cancel' was pressed
-        recName = fullfile(recordDir, recordRawName);sp
+        recName = fullfile(recordDir, recordRawName);
     elseif ( numel(dir([recName, '\*.avi' ])) + numel(dir([recName, '\*.tiff' ])) + numel(dir([recName, '\*.tif' ])) +  numel(dir([recName, '\*.mat' ])) ) < 1 
         errordlg(['No .avi or .tiff/.tif or .mat files found in ' recName ])
         error(['No .avi or .tiff/.tif or .mat files found in ' recName ]);
