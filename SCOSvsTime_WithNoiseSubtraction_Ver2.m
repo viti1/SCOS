@@ -22,7 +22,7 @@
 %                a boolaen map the same size as the record.
 %  ---------------------------------------------------------------------------------------------------------
 
-function  [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , info] = ...
+function  [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , rBFi, info] = ...
     SCOSvsTime_WithNoiseSubtraction_Ver2(recName,backgroundName,windowSize,plotFlag,maskInput)
 if nargin < 4
     plotFlag = true;
@@ -72,16 +72,31 @@ if nargin == 0  || isempty(backgroundName)
     if exist([recName , '_dark'],'dir')
         backgroundName = [recName , '_dark'];
     else
-        dir_Background = [ dir([fileparts(recName) , '\DarkIm*']) dir([fileparts(recName) , '\background*']) dir([fileparts(recName) , '\BG_*'])   ] ;
-    
-        if  isempty(dir_Background) || numel(dir_Background) > 1 
+        dir_Background = [ dir([fileparts(recName) , '\DarkIm*']) dir([fileparts(recName) , '\background*']) dir([fileparts(recName) , '\BG_*']) dir([fileparts(recName) , '\dark_*'])  ] ;
+        bgNames = {dir_Background.name}';
+        recInfoTmp = GetParamsFromFileName(recName);
+        backgroundName = NaN;
+        for zz = 1:numel(bgNames)
+            bgInfoTmp = GetParamsFromFileName(bgNames{zz});
+            if isfield(bgInfoTmp,'Gain') && isfield(bgInfoTmp,'BL') && isfield(bgInfoTmp,'expT')
+                if bgInfoTmp.Gain == recInfoTmp.Gain && bgInfoTmp.expT == recInfoTmp.expT
+                    if ~isnan(backgroundName) % if more that one suitable file
+                        backgroundName = NaN;
+                        break;   % stop search - because more than one suitable file was found
+                    else
+                        backgroundName = fullfile(fileparts(recName),bgNames{zz});                        
+                    end
+                end
+            end
+        end
+        if  isnan(backgroundName) %isempty(dir_Background) || numel(dir_Background) > 1 
             if isRecordFile
                 backgroundName = uigetfile( fileparts(recName) ,'Please Select the background');
             else
                 backgroundName = uigetdir( fileparts(recName) ,'Please Select the background'); 
             end
-        else
-            backgroundName = fullfile(fileparts(recName),dir_Background(1).name);
+%         else
+%             backgroundName = fullfile(fileparts(recName),dir_Background(1).name);
         end
         if isequal(backgroundName,0)
             disp('Aborting...')
@@ -300,14 +315,14 @@ else
 end
 
 if isRecordFile
-    smoothCoeffFile = [fileparts(recName)  '\smoothingCoefficients.mat'];
+    smoothCoeffFile = [fileparts(recName)  '\smoothingCoefficients_' num2str(windowSize) 'x' num2str(windowSize) '.mat'];
 else
-    smoothCoeffFile = [recName  '\smoothingCoefficients.mat'];
+    smoothCoeffFile = [recName  '\smoothingCoefficients_' num2str(windowSize) 'x' num2str(windowSize) '.mat'];
 end
 if ~exist(smoothCoeffFile,'file') 
     % TBD check if it was calculated with the same mask & window size
     disp('Calc Spatial Noise and Smoothing Coefficients');
-    numFramesForSPNoise = 600;
+    numFramesForSPNoise = 600; %Change
     if nOfFrames > 1000 ;  numFramesForSPNoise=1000; end
     spRec = ReadRecord(recName,numFramesForSPNoise) - BlackLevel;
     spIm = mean(spRec,3) - background;
@@ -488,6 +503,7 @@ end
 
 if plotFlag
     BFi = 1./corrSpeckleContrast{1};
+    BFi(corrSpeckleContrast{1} < 0) = NaN;
     if timeVec(end) > 120
         timeToPlot = timeVec / 60; % convert to min
         xLabelStr = 'time [min]';
@@ -521,7 +537,16 @@ if plotFlag
     set(gca,'FontSize',14);
     title('Intensity')
     
-    timingFile = [ fileparts(recName) '\timing.txt'];
+    timingFileDir = dir([ fileparts(recName),'\*timing*.txt' ]);
+    if numel(timingFileDir)==1  
+        timingFile = [fileparts(recName) '\' timingFileDir.name];
+    elseif numel(timingFileDir)>1
+        warning('More that one timing file was found: ')
+        disp({timingFileDir.name}')
+    else
+        timingFile='';
+    end
+
     if exist(timingFile,'file')
         if exist([recName '\StartTime.mat'],'file')
             s = load([recName '\StartTime.mat']);
