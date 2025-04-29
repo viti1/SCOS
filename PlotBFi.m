@@ -19,15 +19,36 @@ load(file)
 
 %% Calc rBFi
 BFi = 1./corrSpeckleContrast{1};
+BFi(corrSpeckleContrast{1} < 0) = NaN;
+
 if timeVec(end) > 120
     timeToPlot = timeVec / 60; % convert to min
     xLabelStr = 'time [min]';
-        rBFi = BFi/mean(BFi([1:round(10*frameRate)])); % normalize by first 10 seconds
-%     rBFi = BFi/mean(BFi(60*frameRate*7+ [1:round(10*frameRate)])); % normalize by first 10 seconds
+    rBFi = BFi/mean(BFi([1:round(10*frameRate)])); % normalize by first 10 seconds
+    if isnan(mean(BFi([1:round(10*frameRate)])))
+        nonNaNBFi = BFi(~isnan(BFi) );
+        normFactor  = mean(nonNaNBFi([1:round(10*frameRate)]));
+        if isnan(normFactor)
+            error('Could not find enough non negative contrast values for BFi normalisation')
+        else
+            warning('Normalizing only by not negatie contrast Values')
+        end  
+        rBFi = BFi/normFactor;
+    end
 else
     timeToPlot = timeVec ; % convert to min
     xLabelStr = 'time [sec]';
     rBFi = BFi/prctile(BFi(1:round(10*frameRate)),5); % normalize by 5% percentile in first 10 sec
+    if isnan(mean(BFi([1:round(10*frameRate)])))
+        nonNaNBFi = BFi(~isnan(BFi) );
+        normFactor  = prctile(nonNaNBFi(1:round(10*frameRate)),5);
+        if isnan(normFactor)
+            error('Could not find enough non negative contrast values for BFi normalisation')
+        else
+            warning('Normalizing only by not negatie contrast Values')
+        end  
+        rBFi = BFi/normFactor;
+    end
 end
    
 %% Timing
@@ -76,10 +97,24 @@ grid on
 % tLim=10; subplot(2,1,1); xlim([0 tLim]); subplot(2,1,2); xlim([0 tLim])
 
 % Timing
-for plt_i = 1:2
-    subplot(2,1,plt_i);
-    markTiming(timingFile);
-    xlim([0 timeToPlot(end)+3])
+timingFileDir = dir([fileparts(recName) '\*timing*.txt']) ;
+if numel(timingFileDir) > 1
+    disp('Diming Files :')
+    [timingFileDir.name ]'
+    warning('more than one timing file');
+    timingFile = [];
+elseif numel(timingFileDir) == 1
+    timingFile = [fileparts(recName) , timingFileDir(1).name];
+else
+    timingFile = [];
+end
+
+if exist(timingFile,'file')
+    for plt_i = 1:2
+        subplot(2,1,plt_i);
+        markTiming(timingFile);
+        xlim([0 timeToPlot(end)+3])
+    end
 end
 %% Save
 savefig(fig8,[fileparts(file) '\_rBFi.fig']);
