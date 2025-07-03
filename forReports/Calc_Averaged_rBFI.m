@@ -60,9 +60,6 @@ if contains(recName,'Hand','IgnoreCase',true)
 elseif contains(recName,'Verbal','IgnoreCase',true)
     taskName = 'Verbal'; 
     titleTaskName = 'Verbal Task';
-%     taskDuration   = 40;
-%     taskStart = 50 + 90*[0:3]; 
-
     taskDuration   = 30; %  0.5 minute
     taskStart = 30 + 60*[0:4]; % each minut
     taskColor = [0 0 1];
@@ -73,6 +70,12 @@ elseif contains(recName,'nBack','IgnoreCase',true)
 %     taskStart = 50 + 90*[0:3]; % each minut
     taskDuration   = 30; %  0.5 minute
     taskStart = 17 + 60*[0:4] ; % each minut
+    taskColor = [0 1 0];
+elseif contains(recName,'subtraction','IgnoreCase',true)
+    taskName = 'Math'; % 'FingerGrip' 'Verbal'
+    titleTaskName = 'Math Task'; 
+    taskDuration   = 30; %  0.5 minute
+    taskStart = 0 + 60*[0.5:1:4.5] ; % each minute
     taskColor = [0 1 0];
 else
     error('Unknow task');
@@ -105,11 +108,8 @@ upFolders = strsplit(recName,filesep);
 shortRecName = strjoin(upFolders(end-2:end));
 
 %% Load the data
-% if useCorrected
-    matName = dir([recName '\LocalStd9x9_corr.mat']);
-% else
-%     matName = dir([recName '\LocalStd9x9.mat']);
-% end
+
+matName = dir([recName '\LocalStd*_corr.mat']);
 
 D = load([ recName filesep matName(1).name]);
 
@@ -206,9 +206,9 @@ for channel_i = 1:nOfChannels
         ylabel('rI ');
         if channel_i == 1
             if nOfChannels==1
-                title({titleStart ,['relative Intensity average over ' num2str(avgWindowSeconds) ' sec'] });            
+                title({titleStart ,['relative Intensity with mean filter of ' num2str(avgWindowSeconds) ' sec'] });            
             else
-                title({titleStart ,['relative Intensity average over ' num2str(avgWindowSeconds) ' sec'] , sprintf('Channel %d (avgI=%gDU)',1,mean(D.meanVec{1}))});            
+                title({titleStart ,['relative Intensity mean filter of ' num2str(avgWindowSeconds) ' sec'] , sprintf('Channel %d (avgI=%gDU)',1,mean(D.meanVec{1}))});            
             end
         else
             title(sprintf('Channel %d (avgI=%.1fDU)',channel_i,mean(D.meanVec{channel_i})));
@@ -229,9 +229,9 @@ for channel_i = 1:nOfChannels
     ylabel('rBFI ')
     if channel_i == 1
         if nOfChannels==1
-            title({titleStart , ['rBFI with time filter of ' num2str(avgWindowSeconds) ' sec'] });
+            title({titleStart , ['rBFI with mean filter of ' num2str(avgWindowSeconds) ' sec'] });
         else
-            title({titleStart , ['rBFI with time filter of ' num2str(avgWindowSeconds) ' sec'] , 'Channel 1'});
+            title({titleStart , ['rBFI with mean filter of ' num2str(avgWindowSeconds) ' sec'] , 'Channel 1'});
         end
     else
         title(sprintf('Channel %d',channel_i));
@@ -249,7 +249,7 @@ savefig(fig1,[recName '\averagedSignals_' num2str(avgWindowSeconds) 'sec_' saveP
 
 %% Plot the epoches
 fixed_ylim = [0.9 1.3];
-if strcmp(taskName,'Verbal') || strcmp(taskName,'nBack') 
+if strcmp(taskName,'Verbal') || strcmp(taskName,'nBack') || strcmp(taskName,'Math') 
     fig2 = figure('Name',[ shortRecName ' '  titlePrefix ' Average ' num2str(avgWindowSeconds) ' Seconds' ],'Units','Normalized','Position',[0 0.8-nOfChannels*0.17 0.65 0.1+nOfChannels*0.17]);
 
     if plotOnlyBFI; Nx=1; else; Nx = 2; end
@@ -295,7 +295,7 @@ if strcmp(taskName,'Verbal') || strcmp(taskName,'nBack')
         ylabel('rBFI ')
         if plotStd
             % plot std shaded line
-            shadedErrorBar(epochTime,avgOverEpoch{channel_i}.rBFI,stdOverEpoch{channel_i}.rBFI,'lineprops',{'k-','LineWidth',3});
+            shadedErrorBar(epochTime,avgOverEpoch{channel_i}.rBFI,stdOverEpoch{channel_i}.rBFI,'lineprops',{'k-','LineWidth',2});
         else
             % plot each epoch as a line
             for eploch_i=1:size(epoch{channel_i}.rBFI,1)
@@ -317,7 +317,6 @@ if strcmp(taskName,'Verbal') || strcmp(taskName,'nBack')
         patch([0  taskDuration , taskDuration 0],[ylims(1) ylims(1) ylims(2) ylims(2)], taskColor,'EdgeColor','none','FaceAlpha',0.15);
         plot([0 0], ylims , ':', taskDuration*[1 1],ylims,'--')
         set(gca,'YLim',ylims);
-        set(gca,'FontSize',14)
         
     end
     savefig(fig2,[recName '\averagedSignals_EpochPlotAverage_' num2str(avgWindowSeconds) 'sec_' savePrefix '.fig']);
