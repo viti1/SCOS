@@ -667,8 +667,6 @@ else %  get(hObject,'String') == 'Start Video'
         src = hObject.UserData.src;
     end
     set(src,'TriggerSource',handles.fig_SCOS_GUI.UserData.CamData.triggerSource)
-    detectorName = 'Basler_1440GS_Vika01'; 
-    dData = load([fileparts(fileparts(mfilename('fullpath'))) '\camerasData\' detectorName '\readNoiseVsGain.mat']);  % detector Data
    
     k = 1;    
     if ~isrunning(vid); start(vid); end
@@ -748,7 +746,6 @@ else %  get(hObject,'String') == 'Start Video'
            im = double(im);
            windowSize = str2double(handles.edt_windowSize.String);
            gain_dB = hObject.UserData.src.Gain;
-           readoutN   = interp1(dData.gainArr,dData.totNoise, gain_dB ,'spline');
            actualGain = ConvertGain(gain_dB,8,10.5e3);      
 
            stdIm = stdfilt(im,true(windowSize));
@@ -758,7 +755,6 @@ else %  get(hObject,'String') == 'Start Video'
            
 %            if mod(scos_ind,500) == 0
 %                disp(['Shot Noise^2 = ', num2str(actualGain*mean(meanIm(mask))) ])               
-%                disp(['Noise^2 = ' num2str(readoutN^2) ])               
 %                disp(['Var_raw = ' num2str(mean((stdIm(mask).^2))) ]);               
 %            end
            if mod(scos_ind, hObject.UserData.saveEachNframes ) == 0 
@@ -772,9 +768,7 @@ else %  get(hObject,'String') == 'Start Video'
                save(handles.fig_SCOS_GUI.UserData.recName,'scosData','scosTime','frameRate','exposureTime','Gain','triggerDelay');
            end
 
-           hObject.UserData.scosData(scos_ind) = mean(Kraw(mask) - actualGain./meanIm(mask) - ( readoutN^2 + 1/12)./meanImSquare(mask) );   % Kappa_corrected 
-           %hObject.UserData.scosData(scos_ind) =  mean( (stdIm(mask)- actualGain*meanIm(mask) - readoutN -1/12)./meanIm(mask) )^2  ;
-
+           hObject.UserData.scosData(scos_ind) = mean(Kraw(mask) - actualGain./meanIm(mask) - ( darkNoise(mask)^2 + 1/12)./meanImSquare(mask) );   % Kappa_corrected 
            hObject.UserData.scosTime(scos_ind) =  tm/60 + hObject.UserData.calcSCOS_lastClock  ; % /60 in order to convert to [min] from [sec]
 
            plot(handles.ax_scos,hObject.UserData.scosTime(1:scos_ind),1./hObject.UserData.scosData(1:scos_ind),'-');
