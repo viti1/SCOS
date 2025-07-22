@@ -1,6 +1,6 @@
 %% Load Data
 clear
-participantID = 'A13';
+participantID = 'B10';
 plotIflag = 1;
 
 % recordsFolder = 'D:\Vika\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek';
@@ -82,9 +82,11 @@ if plotIflag
     set(gca,'FontSize',10);
     xlim([-0.2 endTime+4]);
     grid on
+    markTiming(timingFile);
 end
 
 %% Save
 if plotIflag; addStr='_with_I'; else; addStr='_no_I'; end
 savefig(fig8,[figuresFolder '\' participantID '_scosOnly' addStr '.fig']);
 save([fileparts(figuresFolder) '\short_data\'  participantID '_scos_only.mat'],'rBFi','scosTimeVec','BFi');
+savefig(fig8,[recordsFolder '\' SCOSrecordsDir.name '\' participantID '_rBFi.fig'])

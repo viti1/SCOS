@@ -1,9 +1,11 @@
 %% Load Data
 clear
-participantID = 'A12';
+participantID = 'A13';
 plotIflag = 1;
 
-recordsFolder = 'D:\Vika\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek';
+% recordsFolder = 'D:\Vika\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek';
+recordsFolder = 'E:\ShaareiZedek\SCOS_Records';
+
 nirsFolder = [recordsFolder '\NIRS Data']; 
 
 NIRSrecordsDir = dir([ nirsFolder '\' participantID ' *.csv']); % important to keep the space after participantID
