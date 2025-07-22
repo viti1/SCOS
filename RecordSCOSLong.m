@@ -2,27 +2,30 @@ clear
 clc
 addpath('.\baseFunc');
 %% Get User Input
+realTimeFlag = 0;
 skip_dark_frames = 0;
 if exist('.\lastRec.mat','file')
     lastF = load('.\lastRec.mat');
 else
     lastF.recName = [ fileparts(pwd) '\Records' ];
 end
-% folder = 'C:\SCOS\Records\Tests\T7_MArina_2903_straight_probe_vika_multicore400um_expT8ms_Mono12';
+% folder = 'C:\SCOS\Records\Tests\T10_VikaHead_straight_probe_multicore400umFerulleBlueFibers_expT8ms_Mono12';
+folder = 'C:\SCOS\Records\Functional_3072025\YaelReina_Functional_SubtractionTask';
 % folder = uigetdir(['C:\Users\' getenv('USERNAME') '\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek\12.01.2025'],'Where to Save?');
-folder = uigetdir('C:\SCOS\Records\ShaareiZedek_30_03')
+% folder = uigetdir('C:\SCOS\Records\Tests\Functional_3072025')
 if folder==0 ; return; end
 if ~exist(folder,'dir'); mkdir(folder); end
 lastF.recordName = folder;
 save('.\lastRec.mat','-struct','lastF')
-nOfFrames = Inf; %600*2;
+nOfFrames = 20*60*5.5; %600*2;
 nOfDarkFrames = 600;
 nForSP = 600;
 windowSize = 9;
-frameRate = 1/100e-3; % Hz 
+frameRate = 1/50e-3; % Hz 
 camParams.ExposureTime = 8000;
 camParams.Gain = 8;  % use 8dB for 12bit
 camParams.videoFormat = 'Mono12';
+saveOnly8BitFlag = false;
 camParams.BlackLevel = 30;
 camParams.TriggerSource = 'Line2';  % Hirose - Line3 or Line1, M8 - Line2
 camParams.addToFilename.TriggerSource = false;
@@ -32,7 +35,7 @@ camParams.addToFilename.videoFormat = false;
 setupParams.Laser = 'iBeam';
 setupParams.LaserPower = 120; %mW
 % setupParams.Fiber = '90 deg 400um';
-setupParams.SDS = 2.5;
+setupParams.SDS = 3;
 
 saveTiff_flag = true;
 showEveryNframes = 50;
@@ -87,7 +90,7 @@ end
 disp(recName)
 mkdir(recName);
 %% Get Mask
-uiwait(msgbox("Turn Laser On"));
+uiwait(msgbox("Turn Laser On then Click OK"));
 start(vid);
 while(~vid.FramesAvailable); pause(0.001); end
 imagesBuff = getdata(vid, vid.FramesAvailable); 
@@ -159,13 +162,13 @@ fitI_B_cut = zeros(size(totMask));
 tagstruct.ImageLength = size(darkIm,1);
 tagstruct.ImageWidth  = size(darkIm,2);
 
-% if info.nBits == 8
+ if saveOnly8BitFlag || info.nBits == 8
     tagstruct.BitsPerSample = 8; % since the intensity is less than 256DU anyway
-% elseif ismember(info.nBits,9:16)
-%     tagstruct.BitsPerSample = 16;
-% else
-%     error(['Unsupported video format "' videoFormat '" for writing .tiffs'])
-% end
+ elseif ismember(info.nBits,9:16)
+     tagstruct.BitsPerSample = 16;
+ else
+     error(['Unsupported video format "' videoFormat '" for writing .tiffs'])
+ end
 tagstruct.PlanarConfiguration = Tiff.PlanarConfiguration.Chunky;
 tagstruct.Software = 'MATLAB';
 tagstruct.Photometric = Tiff.Photometric.MinIsBlack;
@@ -191,26 +194,29 @@ if isinf(nOfFrames); nAlloc = 60000; else; nAlloc = nOfFrames;  end
     
 % h_waitbar = waitbar(0,'Recording ...');
 ch = 1; imFig = [];
- if camParams.videoFormat(end) == '8'
-     spRec = uint8(nan(size(totMask,1),size(totMask,2),nForSP));
- else
-     spRec = uint16(nan(size(totMask,1),size(totMask,2),nForSP));
- end
-spSum = zeros(size(totMask));
-timeVec = (0:(nAlloc-1))'*(1/frameRate)/60 ;   % FR = FrameRate
+if realTimeFlag
+    if camParams.videoFormat(end) == '8'
+         spRec = uint8(nan(size(totMask,1),size(totMask,2),nForSP));
+     else
+         spRec = uint16(nan(size(totMask,1),size(totMask,2),nForSP));
+     end
+    spSum = zeros(size(totMask));
+    timeVec = (0:(nAlloc-1))'*(1/frameRate)/60 ;   % FR = FrameRate
 
-fig_scos = figure('Name','SCOS Graph','Units','Normalized','Position',[0.31,0.2, 0.7, 0.45]); 
-ax_scos=subplot(2,1,1); scos_line_h=plot(0,0); ylabel('K_{corr}^2'); xlabel('time [min]');
-grid on; 
-grid minor;
-ax_intn=subplot(2,1,2); intensity_line_h=plot(0,0);  ylabel('I [DU]'); xlabel('time [min]');
-set(ax_scos,'XLim',[timeVec(nForSP+1) 2]);
-set(ax_intn,'XLim',[timeVec(nForSP+1) 2] );
-
+    fig_scos = figure('Name','SCOS Graph','Units','Normalized','Position',[0.31,0.2, 0.7, 0.55]); 
+    ax_scos=subplot(2,1,1); scos_line_h=plot(0,0); ylabel('K_{corr}^2'); xlabel('time [min]');
+    grid on; 
+    grid minor;
+    ax_intn=subplot(2,1,2); intensity_line_h=plot(0,0);  ylabel('I [DU]'); xlabel('time [min]');
+    set(ax_scos,'XLim',[timeVec(nForSP+1) 2]);
+    set(ax_intn,'XLim',[timeVec(nForSP+1) 2] );
+end
 startTime = datetime;
+startTic = tic;
 save([recName '\StartTime.mat'],'startTime');
 
 fprintf('Recording "%s" ... \n',recName);
+msgbox('Start Recording')
 k=1; start(vid);
 while  k<=nOfFrames
     % get image
@@ -221,48 +227,50 @@ while  k<=nOfFrames
     if saveTiff_flag
         t = Tiff([recName,sprintf('\\frame_%0*d.tiff',5,k)],'w');
         setTag(t,tagstruct);
-        write(t,uint8(im_raw));  % since the highest value is less than 255 DU      
+        if saveOnly8BitFlag && info.nBits == 12
+            write(t,uint8(im_raw));  % since the highest value is less than 255 DU 
+        else
+            write(t,im_raw);
+        end
         close(t);
     end
     
     %calc SCOS
-    if k > nForSP
-        im_cut = double(im_raw) - darkIm;
-        stdIm = stdfilt(im_cut,true(windowSize));
+    if realTimeFlag
+        if k > nForSP
+            im_cut = double(im_raw) - darkIm;
+            stdIm = stdfilt(im_cut,true(windowSize));
 
-        meanFrame = mean(im_cut(masks{ch}));
-        fittedI = imboxfilt(im_cut,windowSize);
-        fittedISquare = fittedI.^2;
-    
-        if k > length(rawSpeckleContrast{ch}) 
-            rawSpeckleContrast{ch}  = [ rawSpeckleContrast{ch} nan(1,nAlloc) ];
-            corrSpeckleContrast{ch} = [ rawSpeckleContrast{ch} nan(1,nAlloc) ];
-            meanVec{ch} = [ meanVec{ch} nan(1,nAlloc) ];
-            timeVec = [ timeVec (timeVec(end)+timeVec)];  %#ok<AGROW>
-        end
+            meanFrame = mean(im_cut(masks{ch}));
+            fittedI = imboxfilt(im_cut,windowSize);
+            fittedISquare = fittedI.^2;
 
-        rawSpeckleContrast{ch}(k) = mean((stdIm(masks{ch}).^2 ./ fittedISquare(masks{ch})));
-        corrSpeckleContrast{ch}(k) = mean( ( stdIm(masks{ch}).^2 - actualGain.*fittedI(masks{ch})  - spVar(masks{ch}) - 1/12 - darkVar(masks{ch}))./fittedISquare(masks{ch}) ); % - ( readoutN^2 )./fittedISquare(masks{ch}) );
-        meanVec{ch}(k) = meanFrame;
-    else
-        spRec(:,:,k) = im_raw;
-        if ~isequal(im_raw,uint8(im_raw))
-            disp('Not equal')
+            if k > length(rawSpeckleContrast{ch}) 
+                rawSpeckleContrast{ch}  = [ rawSpeckleContrast{ch} nan(1,nAlloc) ];
+                corrSpeckleContrast{ch} = [ rawSpeckleContrast{ch} nan(1,nAlloc) ];
+                meanVec{ch} = [ meanVec{ch} nan(1,nAlloc) ];
+                timeVec = [ timeVec (timeVec(end)+timeVec)];  %#ok<AGROW>
+            end
+
+            rawSpeckleContrast{ch}(k) = mean((stdIm(masks{ch}).^2 ./ fittedISquare(masks{ch})));
+            corrSpeckleContrast{ch}(k) = mean( ( stdIm(masks{ch}).^2 - actualGain.*fittedI(masks{ch})  - spVar(masks{ch}) - 1/12 - darkVar(masks{ch}))./fittedISquare(masks{ch}) ); % - ( readoutN^2 )./fittedISquare(masks{ch}) );
+            meanVec{ch}(k) = meanFrame;
+        else
+            spRec(:,:,k) = im_raw;
+            if saveOnly8BitFlag && ~isequal(im_raw,uint8(im_raw))
+                disp('Not equal')
+            end
+            spSum = double(im_raw) + spSum;
         end
-        spSum = double(im_raw) + spSum;
     end
-     
+    
     % calc sp noise 
-    if k == nForSP
+    if realTimeFlag && k == nForSP
         stop(vid);
         pauseStart = tic();
         
         disp('Calc SP');        
         spIm = spSum/nForSP  - darkIm;
-%         fig_spIm = my_imagesc(spIm); title(['Image average ' num2str(nForSP) ' frames'] );
-%         imAx = gca;
-%         imgH = findobj(imAx, 'Type', 'image');
-%         savefig(fig_spIm, [recName '\spIm.fig']);
         spVar = stdfilt( spIm ,true(windowSize)).^2;
         save([recName  '\spVar.mat'],'spVar','fitI_A','fitI_B','spIm','totMask');
         clear fitI_A  fitI_B fitI_A_cut fitI_B_cut
@@ -270,8 +278,9 @@ while  k<=nOfFrames
         timeVec(k+1:end) = timeVec(k+1:end) + pauseLen; 
         start(vid);
     end
+
     
-    if k > nForSP && (k== nForSP+1 || mod(k,showEveryNframes) == 0)        
+    if realTimeFlag && k > nForSP && (k== nForSP+1 || mod(k,showEveryNframes) == 0)        
         fprintf('<I>=%.3gDU , K_raw = %.5g , Ks=%.5g , Kr=%.5g, Ksp=%.5g, Kq=%.5g, Kf=%.5g\n',meanFrame,rawSpeckleContrast{ch}(k), ...
             mean(actualGain.*fittedI(masks{ch})./fittedISquare(masks{ch})),mean(darkVar(masks{ch})./fittedISquare(masks{ch})),...
             mean(spVar(masks{ch})./fittedISquare(masks{ch})),mean(1./(12*fittedISquare(masks{ch}))),corrSpeckleContrast{ch}(k));
@@ -286,10 +295,11 @@ while  k<=nOfFrames
     end
     
     
-    % print & increment k
+    % print & show im
     if mod(k,showEveryNframes)==0 
         if isvalid(h2); close(h2); end
-        fprintf('frame %d : %d frames in buffer \n',k,vid.FramesAvailable);
+        currTime = toc(startTic);
+        fprintf('frame %d : %d frames in buffer. Time: %g m %.0gs\n',k,vid.FramesAvailable,floor(currTime/60),mod(currTime,60)));
         im = double(im_raw) - darkIm;
 
         if k==showEveryNframes
@@ -302,19 +312,27 @@ while  k<=nOfFrames
         pcntl = prctile(im(masks{1}),[5 95]);
         title({['frame ' num2str(k) ] ,['<I>=' num2str(mean2(im),3) '  5%I=' num2str(pcntl(1),3) '  95%I=' num2str(pcntl(2),3) ''   ], ...
             [ 'K_{raw}^2=' num2str(rawSpeckleContrast{ch}(k),3)  '  K_{corr}^2=' num2str(corrSpeckleContrast{ch}(k),3 ) ]})         
-    end
+     end
     if mod(k,1000) == 0; fprintf('\n'); end
+    
+    % increment k
     k = k + 1;
 end
 % close(h_waitbar)
 fprintf('Finished\n');
+msgbox("Turn Laser Off")
 stop(vid);
 delete(vid);
 rawSpeckleContrast{ch}(k:end) = [];
 corrSpeckleContrast{ch}(k:end) = [];
 meanVec{ch}(k:end) = [];
+%% Run the calc if not real Time
+if ~realTimeFlag
+    [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , rBFi, info] = ...
+    SCOSvsTime_WithNoiseSubtraction_Ver2(recName,'',windowSize,1,totMask);
+    return
+end
 %%
-msgbox("Turn Laser Off")
 %% Calc First nForSP frames   
 % h1 = msgbox(['Calculating first ' num2str(nForSP) ' frames...']);
 disp( ['Calculating first ' num2str(nForSP) ' frames...'] );
@@ -333,6 +351,7 @@ for k = 1:nForSP
     if mod(k,100)==0; fprintf('%d  ',k); end
 end
 fprintf('\n');
+
 % if isvalid(h1); close(h1); end
 stdStr = sprintf('Std%dx%d',windowSize,windowSize);
 
@@ -412,13 +431,14 @@ else
 end
     
 % Plot
-fig8 = figure('Name',['rBFi: '  recName ],'Units','Normalized','Position',[0.1,0.1,0.4,0.4]);
+fig8 = figure('Name',['rBFi: '  recName ],'Units','Normalized','Position',[0.1,0.075,0.7,0.8]);
 subplot(2,1,1);
 plot(timeToPlot,rBFi);
 title(titleStr,'interpreter','none')
 xlabel(xLabelStr)
 ylabel('rBFi');
-ylim([0 10])
+ylims = ylim;
+ylim([ylims(1) min(10,ylims(2)) ])
 grid on
 hold on;
 set(gca,'FontSize',10);
