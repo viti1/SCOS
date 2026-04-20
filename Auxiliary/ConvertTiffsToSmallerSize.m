@@ -1,4 +1,4 @@
-folderOrig = 'D:\Vika\OneDrive - Bar Ilan University\SCOS_Records\ShaareiZedek\B5 03.11.2024 17-43\Main_expT10ms_Gain20dB_BL100DU_FR5Hz';
+folderOrig = 'C:\Users\tarlevi\OneDrive - Bar-Ilan University - Students\PhD Research\SCOS\Records\VikaHead\Basler_1920\T2_short_40Hz\expT5ms_Gain24dB_BL100DU_FR40Hz_005_dark';
 folderDest = [ folderOrig(1:end) '_reduced' ];
 if ~exist(folderDest,'dir'); mkdir(folderDest); end
 
@@ -7,7 +7,7 @@ if exist([folderOrig ,'\info.mat'],'file'); copyfile([folderOrig ,'\info.mat'],f
 if exist([folderOrig ,'\Mask.mat'],'file'); copyfile([folderOrig ,'\Mask.mat'],folderDest); end
 
 
-tiffFiles = dir([folderOrig ,'\*tiff']); 
+tiffFiles = dir([folderOrig ,'\*.tiff']); 
 nFrames = numel(tiffFiles);
 im1 = imread([folderOrig , filesep, tiffFiles(round(nFrames/2)).name]); % take image from the middle
 if isa(im1,'uint8'); nBits=8; elseif isa(im1,'uint16'); nBits=16 ; else ; error('Unknown nBits'); end
@@ -61,6 +61,7 @@ a = tic;
 [~,sort_ind] = sort([tiffFiles.datenum]);
 tiffFiles = tiffFiles(sort_ind);
 nDigits = numel(num2str(nFrames));
+
 for i = 1:nFrames
    % read im
    im = imread([folderOrig , filesep, tiffFiles(i).name])/devide_by;
