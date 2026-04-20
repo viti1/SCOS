@@ -264,7 +264,7 @@ if ~isequal(size(background),size(im1))
 end
 %% Get G[DU/e]
 nOfBits = info.nBits;   
-actualGain = GetActualGain(info);
+actualGain = LoadG(info);
 
 %% Calc spatialNoise
 disp('Calculate Spatial Noise')

@@ -1,5 +1,5 @@
 %  ---------------------------------------------------------------------------------------------------------
-%  [ timeVec,  , rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = PlotSCOSvsTime(recName,windowSize,plotFlag,maskInput)
+%  [ timeVec,  , rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = SCOSvsTime_WithNoiseSubtraction_Ver2(recName,windowSize,plotFlag,maskInput)
 %  GUI mode:   - Choose the recording folder
 %              - Choose widow size ( it will be used in stdfilter() function in order to calc the local std)
 %              - Choose dark recording folder
@@ -305,7 +305,7 @@ if ~isequal(size(background),size(im1))
 end
 %% Get G[DU/e]
 nOfBits = info.nBits;
-actualGain = GetActualGain(info);
+actualGain = LoadG(info);
  
 %% Calc spatialNoise 
 if ~isfield(info.name , 'BL' )
@@ -427,9 +427,9 @@ for i=1:nOfFrames
         corrSpeckleContrast{ch}(i) = mean( ( stdIm(masks_cut{ch}).^2 - actualGain.*fittedI(masks_cut{ch})  - spVar(masks_cut{ch}) - 1/12 - darkVarPerWindow(masks_cut{ch}))./fittedISquare(masks_cut{ch}) ); 
         meanVec{ch}(i) = meanFrame;
         if i==1
-            fprintf('<I>=%.3gDU , K_raw = %.5g , Ks=%.5g , Kr=%.5g, Ksp=%.5g, Kq=%.5g, Kf=%.5g\n',meanFrame,rawSpeckleContrast{ch}(i), ...
+             fprintf('<I>=%.3gDU , K_raw = %.5g , Ks=%.5g , Kr=%.5g, Ksp=%.5g, Kq=%.5g, Kf=%.5g\n',meanFrame,rawSpeckleContrast{ch}(i), ...
                mean(actualGain.*fittedI(masks_cut{ch})./fittedISquare(masks_cut{ch})),mean(darkVar(masks_cut{ch})./fittedISquare(masks_cut{ch})),...
-               mean(spVar(masks_cut{ch})./fittedISquare(masks_cut{ch})),mean(1./(12*fittedISquare(masks_cut{ch}))),corrSpeckleContrast{ch}(i));
+              mean(spVar(masks_cut{ch})./fittedISquare(masks_cut{ch})),mean(1./(12*fittedISquare(masks_cut{ch}))),corrSpeckleContrast{ch}(i));
         end
     end
 end

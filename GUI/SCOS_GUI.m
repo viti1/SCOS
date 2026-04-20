@@ -224,7 +224,7 @@ end
 if ~isvalid(handles.tgl_startVideo.UserData.src)
     vid = videoinput("gentl", 1, handles.fig_SCOS_GUI.UserData.CamData.videoFormat);
     src = getselectedsource(vid);
-    src.TriggerDelay = expTNum;
+    src.ExposureTime = expTNum;
     delete(vid);
     clear vid
 else

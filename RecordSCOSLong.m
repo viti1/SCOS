@@ -121,7 +121,7 @@ info.cameraSN = src.DeviceSerialNumber;
 info.nBits = str2double(camParams.videoFormat(5:end));
 [~,recShortName] = fileparts(recName);
 info.name = GetParamsFromFileName(recShortName);
-actualGain = GetActualGain(info);
+actualGain = LoadG(info);
 save([recName '\info.mat'],'-struct','info');
 
 %% Decrease Image Size

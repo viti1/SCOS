@@ -40,7 +40,7 @@ for i=1:Nframes
     ACFrm=abs(fftshift(ifft2( abs( fft2(current_frame) ).^2 )))./P;  % Calculating 2DACF of current frame
     ACFrm_avg=ACFrm_avg+ACFrm; % Add to avg sum
 end
-ACFrm_avg=ACFrm_avg/max(ACFrm_avg,[],'all'); %normalization
+ACFrm_avg = ACFrm_avg/max(ACFrm_avg,[],'all'); %normalization
 [~, linearIndex] = max(ACFrm_avg(:));
 [MaxrowIndex, MaxcolumnIndex] = ind2sub(size(ACFrm_avg), linearIndex);
 
