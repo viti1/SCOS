@@ -84,7 +84,7 @@ src.TriggerMode = 'On';
 
 %% Check Frame Rate
 start(vid)
-while(~vid.FramesAvailable); ; end
+while(~vid.FramesAvailable);  end
 tic
 getdata(vid, 1);
 while(~vid.FramesAvailable); ; end
