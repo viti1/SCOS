@@ -23,7 +23,7 @@
 %  ---------------------------------------------------------------------------------------------------------
 
 function  [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , info] = ...
-    SCOSvsTime_WithNoiseSubtraction_Ver2(recName,backgroundName,windowSize,plotFlag,maskInput)
+    SCOSvsTime_Ver2(recName,backgroundName,windowSize,plotFlag,maskInput)
 if nargin <3
     plotFlag = true;
 end
@@ -313,6 +313,8 @@ end
 % fitI_A_cut =  fitI_A(roi.y  , roi.x);
 % fitI_B_cut =  fitI_B(roi.y  , roi.x);
 % bpMap_cut = bpMap(roi.y  , roi.x);
+spVar = spVar(roi.y, roi.x);
+darkVarPerWindow = darkVarPerWindow(roi.y, roi.x);
 
 disp('End Calib')
 toc(start_calib_time)
@@ -352,7 +354,7 @@ for i=1:nOfFrames
     if isRecordFile 
         im_raw = double(rec(:,:,i));
     else
-        frameNames(i).name
+        frameNames(i).name;
         im_raw = double(imread([recName,filesep,frameNames(i).name])) ;  
         if devide_by_16
             im_raw = im_raw/16;

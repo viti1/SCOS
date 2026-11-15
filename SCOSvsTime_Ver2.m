@@ -1,5 +1,5 @@
 %  ---------------------------------------------------------------------------------------------------------
-%  [ timeVec,  , rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = SCOSvsTime_WithNoiseSubtraction_Ver2(recName,windowSize,plotFlag,maskInput)
+%  [ timeVec,  , rawSpeckleContrast , rawSpeckleVar, corrSpeckleVar , corrSpeckleContrast, meanVec , info] = SCOSvsTime_Ver2(recName,windowSize,plotFlag,maskInput)
 %  GUI mode:   - Choose the recording folder
 %              - Choose widow size ( it will be used in stdfilter() function in order to calc the local std)
 %              - Choose dark recording folder
@@ -23,7 +23,7 @@
 %  ---------------------------------------------------------------------------------------------------------
 
 function  [ timeVec, rawSpeckleContrast , corrSpeckleContrast, meanVec , rBFi, info] = ...
-    SCOSvsTime_WithNoiseSubtraction_Ver2(recName,backgroundName,windowSize,plotFlag,maskInput)
+    SCOSvsTime_Ver2(recName,backgroundName,windowSize,plotFlag,maskInput)
 if nargin < 4
     plotFlag = true;
 end
@@ -233,7 +233,7 @@ if ~exist(backgroundName,'file')
     error([backgroundName,' does not exist!']);
 end
 
-requiredBG_nOfFrames = 400;
+requiredBG_nOfFrames = 300;
 if exist(backgroundName,'file') == 7 % it's a folder
     if exist( [ backgroundName '\meanIm.mat'],'file')
         bgS = load([ backgroundName '\meanIm.mat']);
@@ -319,11 +319,11 @@ if isRecordFile
 else
     smoothCoeffFile = [recName  '\smoothingCoefficients_' num2str(windowSize) 'x' num2str(windowSize) '.mat'];
 end
-if ~exist(smoothCoeffFile,'file') 
+% if ~exist(smoothCoeffFile,'file') 
     % TBD check if it was calculated with the same mask & window size
     disp('Calc Spatial Noise and Smoothing Coefficients');
     numFramesForSPNoise = 600; %Change
-    if nOfFrames > 1000 ;  numFramesForSPNoise=1000; end
+%     if nOfFrames > 1000 ;  numFramesForSPNoise=1000; end
     spRec = ReadRecord(recName,numFramesForSPNoise) - BlackLevel;
     spIm = mean(spRec,3) - background;
     fig_spIm = my_imagesc(spIm); title(['Image average ' num2str(numFramesForSPNoise) ' frames'] );
@@ -332,11 +332,11 @@ if ~exist(smoothCoeffFile,'file')
     [fitI_A,fitI_B] = FitMeanIm(spRec,totMask,windowSize);
     clear spRec
     save(smoothCoeffFile,'spVar','fitI_A','fitI_B','spIm','totMask');
-else
-    % TBD check if it was calculated with the same mask & window size
-    disp('Load Spatial Noise and Smoothing Coefficients');
-    load(smoothCoeffFile);
-end
+% else
+%     % TBD check if it was calculated with the same mask & window size
+%     disp('Load Spatial Noise and Smoothing Coefficients');
+%     load(smoothCoeffFile);
+% end
 
 disp('Calibration Time')
 toc(start_calib_time)
@@ -363,6 +363,10 @@ end
    
 fitI_A_cut =  fitI_A(roi.y  , roi.x);
 fitI_B_cut =  fitI_B(roi.y  , roi.x);
+spVar = spVar(roi.y, roi.x);
+darkVarPerWindow = darkVarPerWindow(roi.y, roi.x);
+darkVar = darkVar(roi.y, roi.x); 
+
 % bpMap_cut = bpMap(roi.y  , roi.x);
 %% Calc Specle Contrast
 disp(['Calculating SCOS on "' recName '" ... ']);
